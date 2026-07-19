@@ -1,0 +1,192 @@
+import type {
+  AudioTrack,
+  RenderError,
+  RenderProgress,
+  RenderResult,
+  RenderSettings,
+  RenderStatus,
+  VisualMediaItem,
+} from "../types";
+import { DEFAULT_RENDER_SETTINGS } from "../types";
+
+export type StageId = "soundtrack" | "media" | "review" | "export";
+
+export const STAGES: { id: StageId; label: string }[] = [
+  { id: "soundtrack", label: "Soundtrack" },
+  { id: "media", label: "Visual media" },
+  { id: "review", label: "Review" },
+  { id: "export", label: "Export" },
+];
+
+export interface ProjectState {
+  stage: StageId;
+  audioTracks: AudioTrack[];
+  visualItems: VisualMediaItem[];
+  settings: RenderSettings;
+  renderStatus: RenderStatus;
+  renderProgress: RenderProgress;
+  result: RenderResult | null;
+  error: RenderError | null;
+  /** Non-blocking notices (rejected files, duplicates). */
+  notices: string[];
+}
+
+export const initialProjectState: ProjectState = {
+  stage: "soundtrack",
+  audioTracks: [],
+  visualItems: [],
+  settings: DEFAULT_RENDER_SETTINGS,
+  renderStatus: "idle",
+  renderProgress: { stage: "idle", overall: 0 },
+  result: null,
+  error: null,
+  notices: [],
+};
+
+export type ProjectAction =
+  | { type: "go-to-stage"; stage: StageId }
+  | { type: "add-audio"; tracks: AudioTrack[] }
+  | { type: "remove-audio"; id: string }
+  | { type: "reorder-audio"; from: number; to: number }
+  | { type: "add-visual"; items: VisualMediaItem[] }
+  | { type: "remove-visual"; id: string }
+  | { type: "reorder-visual"; from: number; to: number }
+  | { type: "add-notices"; notices: string[] }
+  | { type: "dismiss-notices" }
+  | { type: "render-started" }
+  | { type: "render-progress"; progress: RenderProgress }
+  | { type: "render-succeeded"; result: RenderResult }
+  | { type: "render-failed"; error: RenderError }
+  | { type: "render-cancelled" }
+  | { type: "clear-result" }
+  | { type: "reset-project" };
+
+function move<T>(arr: T[], from: number, to: number): T[] {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= arr.length ||
+    to >= arr.length
+  ) {
+    return arr;
+  }
+  const next = arr.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+export function soundtrackDuration(state: ProjectState): number {
+  return state.audioTracks.reduce((s, t) => s + t.duration, 0);
+}
+
+export function totalUploadedBytes(state: ProjectState): number {
+  return (
+    state.audioTracks.reduce((s, t) => s + t.size, 0) +
+    state.visualItems.reduce((s, i) => s + i.size, 0)
+  );
+}
+
+export function projectReducer(
+  state: ProjectState,
+  action: ProjectAction,
+): ProjectState {
+  switch (action.type) {
+    case "go-to-stage":
+      return { ...state, stage: action.stage };
+
+    case "add-audio":
+      return { ...state, audioTracks: [...state.audioTracks, ...action.tracks] };
+
+    case "remove-audio": {
+      const track = state.audioTracks.find((t) => t.id === action.id);
+      if (track) URL.revokeObjectURL(track.previewUrl);
+      return {
+        ...state,
+        audioTracks: state.audioTracks.filter((t) => t.id !== action.id),
+      };
+    }
+
+    case "reorder-audio": {
+      const moved = move(state.audioTracks, action.from, action.to);
+      return moved === state.audioTracks ? state : { ...state, audioTracks: moved };
+    }
+
+    case "add-visual":
+      return { ...state, visualItems: [...state.visualItems, ...action.items] };
+
+    case "remove-visual": {
+      const item = state.visualItems.find((i) => i.id === action.id);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return {
+        ...state,
+        visualItems: state.visualItems.filter((i) => i.id !== action.id),
+      };
+    }
+
+    case "reorder-visual": {
+      const moved = move(state.visualItems, action.from, action.to);
+      return moved === state.visualItems ? state : { ...state, visualItems: moved };
+    }
+
+    case "add-notices":
+      return { ...state, notices: [...state.notices, ...action.notices] };
+
+    case "dismiss-notices":
+      return { ...state, notices: [] };
+
+    case "render-started":
+      if (state.renderStatus === "rendering") return state; // no duplicates
+      if (state.result) URL.revokeObjectURL(state.result.url); // stale output
+      return {
+        ...state,
+        renderStatus: "rendering",
+        renderProgress: { stage: "loading-engine", overall: 0 },
+        result: null,
+        error: null,
+      };
+
+    case "render-progress":
+      if (state.renderStatus !== "rendering") return state;
+      return { ...state, renderProgress: action.progress };
+
+    case "render-succeeded":
+      return {
+        ...state,
+        renderStatus: "done",
+        renderProgress: { stage: "finalizing", overall: 1 },
+        result: action.result,
+        error: null,
+      };
+
+    case "render-failed":
+      return {
+        ...state,
+        renderStatus: "error",
+        renderProgress: { stage: "idle", overall: 0 },
+        error: action.error,
+      };
+
+    case "render-cancelled":
+      return {
+        ...state,
+        renderStatus: "cancelled",
+        renderProgress: { stage: "idle", overall: 0 },
+      };
+
+    case "clear-result":
+      if (state.result) URL.revokeObjectURL(state.result.url);
+      return { ...state, result: null, renderStatus: "idle" };
+
+    case "reset-project": {
+      for (const t of state.audioTracks) URL.revokeObjectURL(t.previewUrl);
+      for (const i of state.visualItems) URL.revokeObjectURL(i.previewUrl);
+      if (state.result) URL.revokeObjectURL(state.result.url);
+      return { ...initialProjectState };
+    }
+
+    default:
+      return state;
+  }
+}
