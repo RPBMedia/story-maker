@@ -1,0 +1,181 @@
+/** Shared auth form pieces: email/password fields, OAuth buttons, errors.
+ * Used by both the standalone /auth pages and the in-editor account gate so
+ * the two stay visually and behaviorally identical.
+ */
+import { useState, type FormEvent } from "react";
+import { useAuth } from "./AuthContext";
+import { config } from "../../config/env";
+
+export function AuthUnconfiguredNote() {
+  if (config.authConfigured) return null;
+  return (
+    <p className="auth-note" role="note">
+      Account features aren't configured in this environment. Add
+      <code> VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code>{" "}
+      to <code>.env</code> — see the README for setup.
+    </p>
+  );
+}
+
+export function OAuthButtons({
+  onError,
+  redirectWarning,
+}: {
+  onError: (msg: string) => void;
+  redirectWarning?: boolean;
+}) {
+  const { signInWithOAuth } = useAuth();
+  const [busy, setBusy] = useState<"google" | "apple" | null>(null);
+
+  async function go(provider: "google" | "apple") {
+    setBusy(provider);
+    const err = await signInWithOAuth(provider);
+    // On success the browser navigates away; reaching here means failure/cancel.
+    if (err) onError(err);
+    setBusy(null);
+  }
+
+  return (
+    <div className="oauth-buttons">
+      {redirectWarning && (
+        <p className="auth-note" role="note">
+          Signing in with Google or Apple reloads the page — you may need to
+          select your local files again afterwards. Email sign-in keeps
+          everything in place.
+        </p>
+      )}
+      <button
+        type="button"
+        className="btn btn--secondary btn--block"
+        disabled={busy !== null || !config.authConfigured}
+        onClick={() => go("google")}
+      >
+        {busy === "google" ? "Opening Google…" : "Continue with Google"}
+      </button>
+      <button
+        type="button"
+        className="btn btn--secondary btn--block"
+        disabled={busy !== null || !config.authConfigured}
+        onClick={() => go("apple")}
+      >
+        {busy === "apple" ? "Opening Apple…" : "Continue with Apple"}
+      </button>
+    </div>
+  );
+}
+
+export function EmailPasswordForm({
+  mode,
+  onSuccess,
+}: {
+  mode: "sign-in" | "sign-up";
+  onSuccess?: () => void;
+}) {
+  const { signInWithPassword, signUpWithPassword } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setError(null);
+    setInfo(null);
+    if (mode === "sign-up") {
+      if (password.length < 8) {
+        setError("Use a password of at least 8 characters.");
+        return;
+      }
+      if (password !== confirm) {
+        setError("The passwords don't match.");
+        return;
+      }
+    }
+    setBusy(true);
+    const err =
+      mode === "sign-in"
+        ? await signInWithPassword(email, password)
+        : await signUpWithPassword(email, password);
+    setBusy(false);
+    if (err === "CONFIRM_EMAIL") {
+      setInfo(
+        "Almost there — we've sent a confirmation link to your email. Confirm it, then sign in here.",
+      );
+      return;
+    }
+    if (err) {
+      setError(err);
+      return;
+    }
+    onSuccess?.();
+  }
+
+  return (
+    <form className="auth-form" onSubmit={submit}>
+      <label className="field">
+        <span>Email</span>
+        <input
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </label>
+      <label className="field">
+        <span>Password</span>
+        <input
+          type="password"
+          required
+          autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </label>
+      {mode === "sign-up" && (
+        <label className="field">
+          <span>Confirm password</span>
+          <input
+            type="password"
+            required
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </label>
+      )}
+      {error && (
+        <p className="auth-error" role="alert">
+          {error}
+        </p>
+      )}
+      {info && (
+        <p className="auth-note" role="status">
+          {info}
+        </p>
+      )}
+      <button
+        type="submit"
+        className="btn btn--primary btn--block"
+        disabled={busy || !config.authConfigured}
+      >
+        {busy
+          ? mode === "sign-in"
+            ? "Signing in…"
+            : "Creating account…"
+          : mode === "sign-in"
+            ? "Sign in"
+            : "Create account"}
+      </button>
+      {mode === "sign-up" && (
+        <p className="auth-fineprint">
+          By creating an account you agree to StoryMaker's terms of service and
+          privacy policy (placeholders — final documents to come).
+        </p>
+      )}
+    </form>
+  );
+}

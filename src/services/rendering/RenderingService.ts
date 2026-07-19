@@ -26,12 +26,18 @@ import coreURL from "@ffmpeg/core?url";
 import wasmURL from "@ffmpeg/core/wasm?url";
 import type {
   AudioTrack,
-  DurationPlan,
+  EffectiveTimeline,
   RenderProgress,
   RenderResult,
   RenderSettings,
   RenderStage,
 } from "../../types";
+import {
+  buildXfadeGraph,
+  needsXfadePath,
+  scalePadChain,
+  zoomChain,
+} from "./filters";
 
 export class RenderCancelledError extends Error {
   constructor() {
@@ -57,7 +63,7 @@ interface StageWindow {
 
 export interface RenderJobInput {
   audioTracks: AudioTrack[];
-  plan: DurationPlan;
+  timeline: EffectiveTimeline;
   soundtrackDuration: number;
   settings: RenderSettings;
   onProgress: (p: RenderProgress) => void;
@@ -106,7 +112,9 @@ export class RenderingService {
   // ---- pipeline ------------------------------------------------------------
 
   private async pipeline(job: RenderJobInput): Promise<RenderResult> {
-    const { audioTracks, plan, soundtrackDuration, settings, onProgress } = job;
+    const { audioTracks, timeline, soundtrackDuration, settings, onProgress } = job;
+    const plan = timeline; // segments carry duration/trimTo like the old plan
+    const useXfade = needsXfadePath(timeline);
     const report = (stage: StageWindow, ratio: number) =>
       onProgress({
         stage: stage.stage,
@@ -174,12 +182,9 @@ export class RenderingService {
     );
     this.tempFiles.push("soundtrack.m4a");
 
-    // ---- visual segments (uniform encoding so concat can stream-copy)
-    const { width, height, fps } = settings;
-    const scalePad =
-      `scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
-      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,` +
-      `setsar=1,fps=${fps},format=yuv420p`;
+    // ---- visual segments (uniform encoding so concat can stream-copy and
+    //      xfade inputs stay compatible: same size/fps/SAR/pixfmt)
+    const scalePad = scalePadChain(settings);
     const segNames: string[] = [];
     let imgDone = 0;
     let vidDone = 0;
@@ -188,21 +193,24 @@ export class RenderingService {
       this.checkCancelled();
       const seg = plan.segments[i];
       const out = `seg_${i}.mp4`;
+      const zoom = zoomChain(seg.zoom, seg.duration, settings);
 
       if (seg.item.kind === "image") {
+        const stage = zoom ? w.zoom : w.images;
+        const vf = zoom ? `${scalePad},${zoom}` : scalePad;
         await this.exec(
           [
             "-loop", "1",
             "-t", seg.duration.toFixed(3),
             "-i", visualNames[i],
-            "-vf", scalePad,
+            "-vf", vf,
             "-c:v", "libx264",
             "-preset", "ultrafast",
             "-crf", "23",
             "-an",
             out,
           ],
-          (r) => report(w.images, (imgDone + r) / Math.max(nImages, 1)),
+          (r) => report(stage, (imgDone + r) / Math.max(nImages, 1)),
         );
         imgDone += 1;
       } else {
@@ -212,10 +220,11 @@ export class RenderingService {
           seg.duration > seg.item.duration + 0.001
             ? seg.duration - seg.item.duration
             : 0;
-        const vf =
+        let vf =
           freeze > 0
             ? `${scalePad},tpad=stop_mode=clone:stop_duration=${freeze.toFixed(3)}`
             : scalePad;
+        if (zoom) vf = `${vf},${zoom}`;
         args.push("-vf", vf, "-an");
         args.push("-t", seg.duration.toFixed(3));
         args.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", out);
@@ -228,20 +237,51 @@ export class RenderingService {
       segNames.push(out);
     }
 
-    // ---- concat visual sequence (stream copy)
-    report(w.sequence, 0);
-    const listBody = segNames.map((n) => `file '${n}'`).join("\n");
-    await this.writeTemp("segments.txt", new Blob([listBody]));
-    await this.exec(
-      [
-        "-f", "concat",
-        "-safe", "0",
-        "-i", "segments.txt",
-        "-c", "copy",
-        "visual.mp4",
-      ],
-      (r) => report(w.sequence, r),
-    );
+    // ---- build the visual sequence
+    if (useXfade) {
+      // Cross-fades overlap neighboring segments: chain xfade/concat filters
+      // and re-encode the combined timeline (slower, unavoidable).
+      report(w.sequence, 0);
+      const graph = buildXfadeGraph(timeline);
+      const inputs = segNames.flatMap((n) => ["-i", n]);
+      try {
+        await this.exec(
+          [
+            ...inputs,
+            "-filter_complex", graph.filter,
+            "-map", `[${graph.outLabel}]`,
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "23",
+            "visual.mp4",
+          ],
+          (r) => report({ ...w.sequence, stage: "building-transitions" }, r),
+        );
+      } catch (e) {
+        if (e instanceof RenderFailedError && /xfade/i.test(e.detail ?? "")) {
+          throw new RenderFailedError(
+            "This rendering engine build does not support cross-fades. Set the transition to None and render again.",
+            e.detail,
+          );
+        }
+        throw e;
+      }
+    } else {
+      // No overlaps: fast path, stream-copy concat (identical encodes).
+      report(w.sequence, 0);
+      const listBody = segNames.map((n) => `file '${n}'`).join("\n");
+      await this.writeTemp("segments.txt", new Blob([listBody]));
+      await this.exec(
+        [
+          "-f", "concat",
+          "-safe", "0",
+          "-i", "segments.txt",
+          "-c", "copy",
+          "visual.mp4",
+        ],
+        (r) => report(w.sequence, r),
+      );
+    }
     this.tempFiles.push("visual.mp4");
 
     // ---- mux; -t guarantees output never exceeds the soundtrack
@@ -394,9 +434,9 @@ function clamp(n: number): number {
 }
 
 function stageWindows(nImages: number, nVideos: number) {
-  // weights: engine 8%, write 7%, audio 10%, images/videos share 55% by
-  // count, sequence 8%, mux 8%, finalize 4%
-  const visualTotal = 0.55;
+  // weights: engine 7%, write 6%, audio 9%, images/videos share 47% by
+  // count, sequence/transitions 18%, mux 8%, finalize 5%
+  const visualTotal = 0.47;
   const total = Math.max(nImages + nVideos, 1);
   const imgShare = (nImages / total) * visualTotal;
   const vidShare = (nVideos / total) * visualTotal;
@@ -406,15 +446,25 @@ function stageWindows(nImages: number, nVideos: number) {
     at += size;
     return s;
   };
+  const engine = win("loading-engine", 0.07);
+  const write = win("reading-metadata", 0.06);
+  const audio = win("preparing-soundtrack", 0.09);
+  const images = win("preparing-images", imgShare);
+  const videos = win("normalizing-videos", vidShare);
+  const sequence = win("building-sequence", 0.18);
+  const mux = win("combining", 0.08);
+  const finalize = win("finalizing", 0.05);
   return {
-    engine: win("loading-engine", 0.08),
-    write: win("reading-metadata", 0.07),
-    audio: win("preparing-soundtrack", 0.1),
-    images: win("preparing-images", imgShare),
-    videos: win("normalizing-videos", vidShare),
-    sequence: win("building-sequence", 0.08),
-    mux: win("combining", 0.08),
-    finalize: win("finalizing", 0.04),
+    engine,
+    write,
+    audio,
+    images,
+    // zoom shares the image window; only the visible stage label differs
+    zoom: { ...images, stage: "applying-zoom" as RenderStage },
+    videos,
+    sequence,
+    mux,
+    finalize,
   };
 }
 

@@ -1,14 +1,50 @@
+import { useEffect } from "react";
 import { useProject } from "../../state/ProjectContext";
 import { formatBytes, formatDuration, formatSeconds } from "../../utils/format";
+import { EffectsPanel } from "./EffectsPanel";
+import { RenderTimeInfo } from "../../components/RenderTimeInfo";
+import {
+  estimateInputFromTimeline,
+  estimateRenderTime,
+} from "../../utils/renderEstimate";
+import { analytics } from "../../services/analytics";
 
 /** Soft thresholds that trigger warnings, never blocks. */
 const LARGE_PROJECT_BYTES = 500 * 1024 * 1024; // 500 MB
 const LONG_SOUNDTRACK_SECONDS = 10 * 60; // 10 min
 
 export function ReviewStage({ onGenerate }: { onGenerate: () => void }) {
-  const { state, plan, soundtrackDuration, totalBytes, isValid } = useProject();
+  const { state, timeline, soundtrackDuration, totalBytes, isValid } =
+    useProject();
   const images = state.visualItems.filter((i) => i.kind === "image");
   const videos = state.visualItems.filter((i) => i.kind === "video");
+
+  const estimate =
+    timeline.segments.length > 0
+      ? estimateRenderTime(
+          estimateInputFromTimeline(
+            soundtrackDuration,
+            timeline,
+            state.settings.width * state.settings.height,
+          ),
+        )
+      : null;
+
+  useEffect(() => {
+    if (estimate) {
+      analytics.track("render_time_estimate_viewed", {
+        category: estimate.category,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimate?.category]);
+
+  const activeTransitions = timeline.boundaries.filter(
+    (b) => b.type !== "none" && b.overlap > 0,
+  ).length;
+  const zoomedItems = timeline.segments.filter(
+    (s) => s.zoom.type !== "none",
+  ).length;
 
   const warnings: string[] = [];
   if (totalBytes > LARGE_PROJECT_BYTES) {
@@ -21,14 +57,19 @@ export function ReviewStage({ onGenerate }: { onGenerate: () => void }) {
       `The soundtrack is ${formatDuration(soundtrackDuration)} long. Rendering happens at roughly real-time speed or slower in the browser, so expect a long wait.`,
     );
   }
-  if (plan.trimmed) {
+  if (timeline.trimmed) {
     warnings.push(
       "Your video clips are longer than the soundtrack — the visual sequence will be cut when the audio ends.",
     );
   }
-  if (plan.freezeTail > 0) {
+  if (timeline.freezeTail > 0) {
     warnings.push(
-      `The last clip's final frame will hold for ${formatSeconds(plan.freezeTail)} so the picture lasts until the audio ends.`,
+      `The last clip's final frame will hold for ${formatSeconds(timeline.freezeTail)} so the picture lasts until the audio ends.`,
+    );
+  }
+  if (timeline.anyClamped) {
+    warnings.push(
+      "Some cross-fades were shortened automatically because neighboring items are too brief for the requested duration.",
     );
   }
 
@@ -70,7 +111,7 @@ export function ReviewStage({ onGenerate }: { onGenerate: () => void }) {
         </div>
         <div className="summary-cell">
           <dt>Output duration</dt>
-          <dd>{formatDuration(plan.total)}</dd>
+          <dd>{formatDuration(timeline.total)}</dd>
         </div>
         <div className="summary-cell">
           <dt>Resolution</dt>
@@ -82,38 +123,67 @@ export function ReviewStage({ onGenerate }: { onGenerate: () => void }) {
           <dt>Frame rate</dt>
           <dd>{state.settings.fps} fps</dd>
         </div>
+        <div className="summary-cell">
+          <dt>Cross-fades</dt>
+          <dd>{activeTransitions}</dd>
+        </div>
+        <div className="summary-cell">
+          <dt>Zoomed items</dt>
+          <dd>{zoomedItems}</dd>
+        </div>
       </dl>
 
-      {plan.segments.length > 0 && (
+      <EffectsPanel />
+
+      {timeline.segments.length > 0 && (
         <>
           <h3 className="section-title">Sequence</h3>
           <div
             className="sequence-bar"
             role="img"
-            aria-label={`Sequence of ${plan.segments.length} segments`}
+            aria-label={`Sequence of ${timeline.segments.length} segments${activeTransitions > 0 ? ` with ${activeTransitions} cross-fades` : ""}`}
           >
-            {plan.segments.map((s) => (
-              <div
-                key={s.item.id}
-                className={`sequence-bar__seg sequence-bar__seg--${s.item.kind}`}
-                style={{
-                  flexGrow: Math.max(s.duration, 0.2),
-                }}
-                title={`${s.item.name} — ${formatSeconds(s.duration)}`}
-              >
-                <span className="sequence-bar__label">
-                  {s.item.kind === "image" ? "IMG" : "VID"}
-                </span>
-              </div>
-            ))}
+            {timeline.segments.map((s, i) => {
+              const boundary = timeline.boundaries.find(
+                (b) => b.afterIndex === i,
+              );
+              return (
+                <div
+                  key={s.item.id}
+                  className={`sequence-bar__wrap${
+                    boundary && boundary.type === "crossfade" && boundary.overlap > 0
+                      ? " sequence-bar__wrap--fade"
+                      : ""
+                  }`}
+                  style={{ flexGrow: Math.max(s.duration, 0.2) }}
+                >
+                  <div
+                    className={`sequence-bar__seg sequence-bar__seg--${s.item.kind}`}
+                    title={`${s.item.name} — ${formatSeconds(s.duration)}${
+                      s.zoom.type !== "none" ? ` · ${s.zoom.type}` : ""
+                    }`}
+                  >
+                    <span className="sequence-bar__label">
+                      {s.item.kind === "image" ? "IMG" : "VID"}
+                      {s.zoom.type === "zoom-in" && " ⊕"}
+                      {s.zoom.type === "zoom-out" && " ⊖"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <p className="sequence-legend">
             <span className="chip chip--image">Image</span>{" "}
             <span className="chip chip--video">Video</span> — width is
-            proportional to time in the final video.
+            proportional to time; ⊕/⊖ mark zoom in/out; the fade mark between
+            blocks shows a cross-fade. The editor preview is indicative — the
+            exported video is rendered by FFmpeg.
           </p>
         </>
       )}
+
+      <RenderTimeInfo estimate={estimate} />
 
       {blockers.length > 0 && (
         <div className="blockers" role="alert">
@@ -146,6 +216,9 @@ export function ReviewStage({ onGenerate }: { onGenerate: () => void }) {
         >
           Generate Video
         </button>
+        <p className="stage-sub" style={{ marginTop: 8 }}>
+          Takes several minutes — you'll confirm on the next step.
+        </p>
       </div>
     </section>
   );

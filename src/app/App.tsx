@@ -6,6 +6,7 @@ import { ReviewStage } from "../features/project/ReviewStage";
 import { ExportStage } from "../features/rendering/ExportStage";
 import { Notices } from "../components/Notices";
 import { formatDuration } from "../utils/format";
+import { AccountMenu } from "../features/auth/AccountMenu";
 
 export function App() {
   const { state, dispatch, soundtrackDuration, isValid } = useProject();
@@ -27,6 +28,7 @@ export function App() {
           </span>
           <h1>StoryMaker</h1>
         </div>
+        <div className="topbar__right">
         <div className="topbar__status">
           {state.audioTracks.length > 0 && (
             <span>
@@ -41,6 +43,8 @@ export function App() {
               {state.visualItems.length === 1 ? "" : "s"}
             </span>
           )}
+        </div>
+        <AccountMenu />
         </div>
       </header>
 

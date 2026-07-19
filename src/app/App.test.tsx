@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { App } from "./App";
 import { ProjectProvider } from "../state/ProjectContext";
+import { AuthProvider } from "../features/auth/AuthContext";
 
 function renderApp() {
   return render(
-    <ProjectProvider>
-      <App />
-    </ProjectProvider>,
+    <MemoryRouter>
+      <AuthProvider>
+        <ProjectProvider>
+          <App />
+        </ProjectProvider>
+      </AuthProvider>
+    </MemoryRouter>,
   );
 }
 

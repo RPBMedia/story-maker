@@ -1,13 +1,33 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { App } from "./app/App";
 import { ProjectProvider } from "./state/ProjectContext";
+import { AuthProvider } from "./features/auth/AuthContext";
+import {
+  ForgotPasswordPage,
+  ResetPasswordPage,
+  SignInPage,
+  SignUpPage,
+} from "./features/auth/AuthPages";
 import "./app/styles.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ProjectProvider>
-      <App />
-    </ProjectProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ProjectProvider>
+          <Routes>
+            <Route path="/auth/sign-in" element={<SignInPage />} />
+            <Route path="/auth/sign-up" element={<SignUpPage />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            {/* The editor is intentionally NOT auth-protected — anonymous
+                users can build a full project; only export is gated. */}
+            <Route path="*" element={<App />} />
+          </Routes>
+        </ProjectProvider>
+      </AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 );

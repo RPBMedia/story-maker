@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useProject } from "../../state/ProjectContext";
+import { useAuth } from "../auth/AuthContext";
+import { AccountGateModal } from "../auth/AccountGateModal";
+import { evaluateExportPermission } from "../../services/exportPolicy";
+import { analytics } from "../../services/analytics";
 import {
   renderingService,
   RenderCancelledError,
@@ -7,31 +11,98 @@ import {
 } from "../../services/rendering/RenderingService";
 import { RENDER_STAGE_LABELS } from "../../types";
 import { formatBytes, formatDuration } from "../../utils/format";
+import { RenderTimeInfo } from "../../components/RenderTimeInfo";
+import {
+  estimateInputFromTimeline,
+  estimateRenderTime,
+  estimateRemainingMs,
+  formatMs,
+} from "../../utils/renderEstimate";
 
 export function ExportStage() {
-  const { state, dispatch, plan, soundtrackDuration, isValid } = useProject();
+  const { state, dispatch, timeline, soundtrackDuration, isValid } =
+    useProject();
+  const { auth } = useAuth();
   const [detailOpen, setDetailOpen] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+
   const { renderStatus, renderProgress, result, error } = state;
   const rendering = renderStatus === "rendering";
+  const permission = evaluateExportPermission(auth);
 
-  async function generate() {
+  const estimate =
+    timeline.segments.length > 0
+      ? estimateRenderTime(
+          estimateInputFromTimeline(
+            soundtrackDuration,
+            timeline,
+            state.settings.width * state.settings.height,
+          ),
+        )
+      : null;
+
+  // elapsed-time ticker
+  useEffect(() => {
+    if (!rendering) return;
+    startedAtRef.current = Date.now();
+    setElapsedMs(0);
+    const id = window.setInterval(() => {
+      if (startedAtRef.current !== null) {
+        setElapsedMs(Date.now() - startedAtRef.current);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [rendering]);
+
+  // page-close protection while rendering only
+  useEffect(() => {
+    if (!rendering) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Chrome requires returnValue to be set; the browser shows its own copy.
+      e.returnValue =
+        "Leaving this page will cancel the render in progress.";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [rendering]);
+
+  const remainingMs = rendering
+    ? estimateRemainingMs(elapsedMs, renderProgress.overall)
+    : null;
+
+  async function startRender() {
     if (rendering || !isValid) return;
     dispatch({ type: "render-started" });
+    analytics.track("export_started", {
+      transitions: timeline.boundaries.some((b) => b.overlap > 0),
+      zoom: timeline.segments.some((s) => s.zoom.type !== "none"),
+    });
+    const t0 = Date.now();
     try {
       const res = await renderingService.render({
         audioTracks: state.audioTracks,
-        plan,
+        timeline,
         soundtrackDuration,
         settings: state.settings,
         onProgress: (progress) =>
           dispatch({ type: "render-progress", progress }),
       });
+      setLastRenderMs(Date.now() - t0);
+      analytics.track("export_completed", {
+        elapsedSec: Math.round((Date.now() - t0) / 1000),
+      });
       dispatch({ type: "render-succeeded", result: res });
     } catch (e) {
       if (e instanceof RenderCancelledError) {
+        analytics.track("render_cancelled");
         dispatch({ type: "render-cancelled" });
         return;
       }
+      analytics.track("export_failed");
       dispatch({
         type: "render-failed",
         error: {
@@ -46,6 +117,22 @@ export function ExportStage() {
     }
   }
 
+  function onGenerateClick() {
+    analytics.track("export_attempted");
+    if (permission.kind === "auth-required") {
+      setGateOpen(true);
+      return;
+    }
+    if (permission.kind !== "allowed") return; // reason rendered below
+    if (!state.exportConfirmed) return; // confirmation panel handles start
+    void startRender();
+  }
+
+  function confirmAndStart() {
+    dispatch({ type: "confirm-export" });
+    void startRender();
+  }
+
   function resetProject() {
     const hasContent =
       state.audioTracks.length > 0 || state.visualItems.length > 0;
@@ -58,10 +145,24 @@ export function ExportStage() {
       return;
     }
     renderingService.cancel();
+    setLastRenderMs(null);
     dispatch({ type: "reset-project" });
   }
 
   const pct = Math.round(renderProgress.overall * 100);
+  const showConfirmation =
+    !rendering &&
+    !result &&
+    isValid &&
+    permission.kind === "allowed" &&
+    !state.exportConfirmed;
+
+  const activeTransitions = timeline.boundaries.filter(
+    (b) => b.overlap > 0,
+  ).length;
+  const zoomedItems = timeline.segments.filter(
+    (s) => s.zoom.type !== "none",
+  ).length;
 
   return (
     <section aria-labelledby="export-title">
@@ -76,21 +177,87 @@ export function ExportStage() {
       </header>
 
       {!rendering && !result && (
-        <div className="export-launch">
-          <button
-            type="button"
-            className="btn btn--primary btn--large"
-            disabled={!isValid}
-            onClick={generate}
-          >
-            Generate Video
-          </button>
-          {!isValid && (
-            <p className="warning-inline" role="note">
-              Add at least one audio track and one visual item first.
-            </p>
+        <>
+          <RenderTimeInfo estimate={estimate} />
+
+          {permission.kind === "temporarily-unavailable" && (
+            <div className="warnings" role="note">
+              <strong>Export is unavailable:</strong> {permission.reason}
+            </div>
           )}
-        </div>
+
+          {showConfirmation ? (
+            <div className="confirm-panel card">
+              <h3 className="section-title">Ready to render?</h3>
+              <dl className="confirm-grid">
+                <div>
+                  <dt>Output duration</dt>
+                  <dd>{formatDuration(timeline.total)}</dd>
+                </div>
+                <div>
+                  <dt>Resolution</dt>
+                  <dd>
+                    {state.settings.width}×{state.settings.height} ·{" "}
+                    {state.settings.fps} fps
+                  </dd>
+                </div>
+                <div>
+                  <dt>Visual items</dt>
+                  <dd>{timeline.segments.length}</dd>
+                </div>
+                <div>
+                  <dt>Cross-fades</dt>
+                  <dd>{activeTransitions > 0 ? `${activeTransitions} enabled` : "off"}</dd>
+                </div>
+                <div>
+                  <dt>Subtle zoom</dt>
+                  <dd>{zoomedItems > 0 ? `${zoomedItems} item(s)` : "off"}</dd>
+                </div>
+                <div>
+                  <dt>Expected time</dt>
+                  <dd>{estimate?.label ?? "around 5–15 minutes"}</dd>
+                </div>
+              </dl>
+              <div className="result__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary btn--large"
+                  onClick={confirmAndStart}
+                >
+                  Start Rendering
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => window.history.back()}
+                >
+                  Go Back
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="export-launch">
+              <button
+                type="button"
+                className="btn btn--primary btn--large"
+                disabled={!isValid || permission.kind === "temporarily-unavailable"}
+                onClick={onGenerateClick}
+              >
+                Generate Video
+              </button>
+              {!isValid && (
+                <p className="warning-inline" role="note">
+                  Add at least one audio track and one visual item first.
+                </p>
+              )}
+              {permission.kind === "auth-required" && isValid && (
+                <p className="stage-sub">
+                  You'll be asked to sign in — your project stays put.
+                </p>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {rendering && (
@@ -110,8 +277,16 @@ export function ExportStage() {
           >
             <div className="progress-fill" style={{ width: `${pct}%` }} />
           </div>
+          <div className="render-progress__timing">
+            <span>Elapsed: {formatMs(elapsedMs)}</span>
+            {remainingMs !== null && (
+              <span>· roughly {formatMs(remainingMs)} left</span>
+            )}
+          </div>
           <p className="render-progress__hint">
-            Keep this tab open. Rendering long projects can take a while.
+            Rendering is still in progress — longer projects can take 5–15
+            minutes. Keep this tab open and your device awake; refreshing or
+            closing the page cancels the render.
           </p>
           <button
             type="button"
@@ -134,9 +309,13 @@ export function ExportStage() {
         <div className="blockers" role="alert">
           <strong>{error.message}</strong>
           <p>
+            Rendering can take several minutes, and this one didn't make it.{" "}
             {error.projectIntact
-              ? "Your uploaded project is still intact. You can adjust it or simply try again."
-              : "Please re-check your uploaded files."}
+              ? "Your uploaded project is still intact — you can simply try again."
+              : "Please re-check your uploaded files."}{" "}
+            If it fails repeatedly, try a shorter project, fewer or smaller
+            media files, or disabling cross-fades and zoom — memory limits are
+            the most common cause in the browser.
           </p>
           {error.detail && (
             <>
@@ -155,6 +334,10 @@ export function ExportStage() {
 
       {result && (
         <div className="result">
+          <p className="result__done" role="status">
+            <strong>Rendering complete</strong>
+            {lastRenderMs !== null && <> — finished in {formatMs(lastRenderMs)}</>}.
+          </p>
           <video
             className="result__player"
             src={result.url}
@@ -179,7 +362,7 @@ export function ExportStage() {
             <button
               type="button"
               className="btn btn--secondary"
-              onClick={generate}
+              onClick={() => void startRender()}
             >
               Render again
             </button>
@@ -192,6 +375,8 @@ export function ExportStage() {
           Reset project
         </button>
       </div>
+
+      <AccountGateModal open={gateOpen} onClose={() => setGateOpen(false)} />
     </section>
   );
 }

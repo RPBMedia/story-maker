@@ -146,3 +146,42 @@ describe("projectReducer", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("visual effect settings", () => {
+  it("defaults to no transition and no zoom (old projects unaffected)", () => {
+    expect(initialProjectState.projectTransition.type).toBe("none");
+    expect(initialProjectState.projectZoom.type).toBe("none");
+    expect(initialProjectState.effectOverrides).toEqual({});
+  });
+
+  it("stores project-level effect settings and re-arms confirmation", () => {
+    let s = projectReducer(initialProjectState, { type: "confirm-export" });
+    expect(s.exportConfirmed).toBe(true);
+    s = projectReducer(s, {
+      type: "set-project-transition",
+      transition: { type: "crossfade", duration: 0.5 },
+    });
+    expect(s.projectTransition).toEqual({ type: "crossfade", duration: 0.5 });
+    expect(s.exportConfirmed).toBe(false); // config change re-arms confirm
+  });
+
+  it("stores per-item overrides and null means inherit", () => {
+    let s = projectReducer(initialProjectState, {
+      type: "set-item-zoom",
+      id: "item-1",
+      zoom: { type: "zoom-in", amount: 1.05 },
+    });
+    expect(s.effectOverrides["item-1"]?.zoom).toEqual({
+      type: "zoom-in",
+      amount: 1.05,
+    });
+    s = projectReducer(s, { type: "set-item-zoom", id: "item-1", zoom: null });
+    expect(s.effectOverrides["item-1"]?.zoom).toBeNull();
+  });
+
+  it("adding media re-arms the export confirmation", () => {
+    let s = projectReducer(initialProjectState, { type: "confirm-export" });
+    s = projectReducer(s, { type: "add-visual", items: [image()] });
+    expect(s.exportConfirmed).toBe(false);
+  });
+});
