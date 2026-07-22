@@ -1221,6 +1221,66 @@ input[type="range"] {
   font-size: 0.8rem;
 }
 
+/* ---- account-state notices (Export screen) ----
+   Deliberately neutral/grey, distinct from .info-panel's blue render-time
+   guidance — authentication and rendering are separate concerns and must
+   not be visually conflated. Never uses .warnings/.blockers (danger/amber)
+   styling for the normal signed-out or unavailable states. */
+.account-notice {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin: 14px 0;
+}
+
+.account-notice__icon {
+  font-size: 1.2rem;
+  line-height: 1.4;
+}
+
+.account-notice__title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.94rem;
+}
+
+.account-notice--ready {
+  background: rgba(70, 176, 110, 0.08);
+  border-color: rgba(70, 176, 110, 0.35);
+}
+
+.account-notice--unavailable {
+  align-items: center;
+}
+
+.account-notice--unavailable > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.account-notice--unavailable .account-notice__title {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+/* ---- export summary (always visible, independent of auth state) ---- */
+.export-summary {
+  padding: 18px;
+  margin: 18px 0;
+}
+
+/* ---- header auth entry points ---- */
+.auth-entry {
+  display: flex;
+  gap: 10px;
+}
+
 /* ---- confirmation panel ---- */
 .confirm-panel {
   padding: 20px;
@@ -1291,5 +1351,18 @@ input[type="range"] {
 
   .account__label {
     display: none;
+  }
+
+  .auth-entry {
+    gap: 6px;
+  }
+
+  .auth-entry .btn {
+    padding: 8px 12px;
+    font-size: 0.82rem;
+  }
+
+  .account-notice {
+    flex-direction: column;
   }
 }

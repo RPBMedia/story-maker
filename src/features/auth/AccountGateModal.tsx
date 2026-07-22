@@ -6,24 +6,40 @@
 import { useEffect, useRef, useState } from "react";
 import { EmailPasswordForm, OAuthButtons, AuthUnconfiguredNote } from "./AuthForms";
 import { analytics } from "../../services/analytics";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 export function AccountGateModal({
   open,
   onClose,
+  onAuthenticated,
 }: {
   open: boolean;
   onClose: () => void;
+  /** Called once, after a successful sign-in/sign-up, just before onClose. */
+  onAuthenticated?: () => void;
 }) {
   const [tab, setTab] = useState<"sign-in" | "sign-up">("sign-up");
   const [oauthError, setOauthError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  useFocusTrap(dialogRef, open);
 
   useEffect(() => {
     if (open) {
-      analytics.track("account_gate_viewed");
+      previouslyFocused.current = document.activeElement as HTMLElement | null;
+      analytics.track("export_auth_gate_viewed");
+      analytics.track(tab === "sign-up" ? "sign_up_viewed" : "sign_in_viewed", {
+        context: "export-gate",
+      });
       // move focus into the dialog for keyboard users
       dialogRef.current?.focus();
+    } else {
+      // Return focus to whatever opened the gate (the Generate Video /
+      // Start Rendering trigger), per accessibility requirements.
+      previouslyFocused.current?.focus();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
@@ -37,6 +53,19 @@ export function AccountGateModal({
 
   if (!open) return null;
 
+  function handleAuthenticated() {
+    analytics.track("export_auth_gate_completed");
+    onAuthenticated?.();
+    onClose();
+  }
+
+  function switchTab(next: "sign-in" | "sign-up") {
+    setTab(next);
+    analytics.track(next === "sign-up" ? "sign_up_viewed" : "sign_in_viewed", {
+      context: "export-gate",
+    });
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -44,6 +73,7 @@ export function AccountGateModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="gate-title"
+        aria-describedby="gate-desc"
         tabIndex={-1}
         ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
@@ -56,10 +86,9 @@ export function AccountGateModal({
         >
           ✕
         </button>
-        <h2 id="gate-title">Create a free account to render your video</h2>
-        <p className="stage-sub">
-          Your current project stays right here — nothing is uploaded and
-          nothing is lost while you sign in.
+        <h2 id="gate-title">Create a free account to render and download your video.</h2>
+        <p id="gate-desc" className="stage-sub">
+          Your soundtrack, visual sequence, and effects will remain in place.
         </p>
         <AuthUnconfiguredNote />
         <div className="gate-tabs" role="tablist">
@@ -68,7 +97,7 @@ export function AccountGateModal({
             role="tab"
             aria-selected={tab === "sign-up"}
             className={`gate-tab${tab === "sign-up" ? " gate-tab--active" : ""}`}
-            onClick={() => setTab("sign-up")}
+            onClick={() => switchTab("sign-up")}
           >
             Create account
           </button>
@@ -77,12 +106,12 @@ export function AccountGateModal({
             role="tab"
             aria-selected={tab === "sign-in"}
             className={`gate-tab${tab === "sign-in" ? " gate-tab--active" : ""}`}
-            onClick={() => setTab("sign-in")}
+            onClick={() => switchTab("sign-in")}
           >
             Sign in
           </button>
         </div>
-        <EmailPasswordForm mode={tab} onSuccess={onClose} />
+        <EmailPasswordForm mode={tab} onSuccess={handleAuthenticated} />
         <div className="auth-divider" aria-hidden="true">
           or
         </div>

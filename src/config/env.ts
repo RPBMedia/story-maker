@@ -13,6 +13,9 @@ export interface AppConfig {
   authConfigured: boolean;
   /** Origin-aware redirect base — never hardcode localhost. */
   siteOrigin: string;
+  /** Which required variables are missing — for DEV-only diagnostics.
+   * Never surfaced in the normal (production) UI; see README setup. */
+  missingEnvVars: string[];
 }
 
 function readEnv(name: string): string | null {
@@ -39,17 +42,31 @@ export function loadConfig(): AppConfig {
   const supabaseUrl = validateUrl(readEnv("VITE_SUPABASE_URL"));
   const supabaseAnonKey = readEnv("VITE_SUPABASE_ANON_KEY");
   const authConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+  const missingEnvVars = [
+    !supabaseUrl && "VITE_SUPABASE_URL",
+    !supabaseAnonKey && "VITE_SUPABASE_ANON_KEY",
+  ].filter((v): v is string => Boolean(v));
+
+  // Detailed configuration info is a DEVELOPER diagnostic only — it must
+  // never be the message an end user sees. The normal UI (AccountMenu,
+  // ExportStage, exportPolicy) shows calm "temporarily unavailable" copy
+  // with no variable names; this console line is the only place the exact
+  // missing variables are named.
   if (!authConfigured && import.meta.env.DEV) {
     console.info(
-      "[StoryMaker] Supabase is not configured (VITE_SUPABASE_URL / " +
-        "VITE_SUPABASE_ANON_KEY missing). The editor works fully; " +
-        "account features and export will explain the missing setup.",
+      `[StoryMaker dev] Supabase is not configured — missing ${missingEnvVars.join(
+        ", ",
+      )}. The editor works fully without it; account features and export ` +
+        "will show a calm 'temporarily unavailable' message instead of " +
+        "this diagnostic. Copy .env.example to .env and fill in your " +
+        "Supabase project values (see README → Supabase setup) to enable them.",
     );
   }
   return {
     supabaseUrl,
     supabaseAnonKey,
     authConfigured,
+    missingEnvVars,
     siteOrigin:
       typeof window !== "undefined" ? window.location.origin : "",
   };

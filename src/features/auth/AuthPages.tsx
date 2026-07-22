@@ -2,8 +2,8 @@
  * /auth/forgot-password, /auth/reset-password. Same design language as the
  * editor — dark shell, same buttons, same typography.
  */
-import { useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import {
   AuthUnconfiguredNote,
@@ -11,6 +11,25 @@ import {
   OAuthButtons,
 } from "./AuthForms";
 import { config } from "../../config/env";
+import { analytics } from "../../services/analytics";
+
+/**
+ * Reads and validates the `returnTo` query param. Only same-app relative
+ * paths are accepted (must start with a single "/", never "//" or "/\" —
+ * both are browser-recognized ways to smuggle an external origin — and never
+ * an absolute URL) to prevent open-redirect abuse. Anything else falls back
+ * to the app root.
+ */
+function useSafeReturnTo(): string {
+  const [params] = useSearchParams();
+  const raw = params.get("returnTo");
+  if (raw && /^\/(?!\/)(?!\\)/.test(raw)) return raw;
+  return "/";
+}
+
+function withReturnTo(path: string, returnTo: string): string {
+  return returnTo === "/" ? path : `${path}?returnTo=${encodeURIComponent(returnTo)}`;
+}
 
 function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -32,10 +51,16 @@ function AuthShell({ title, children }: { title: string; children: ReactNode }) 
 
 export function SignInPage() {
   const navigate = useNavigate();
+  const returnTo = useSafeReturnTo();
   const [oauthError, setOauthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    analytics.track("sign_in_viewed", { context: "page" });
+  }, []);
+
   return (
     <AuthShell title="Sign in">
-      <EmailPasswordForm mode="sign-in" onSuccess={() => navigate("/")} />
+      <EmailPasswordForm mode="sign-in" onSuccess={() => navigate(returnTo)} />
       <div className="auth-divider" aria-hidden="true">
         or
       </div>
@@ -46,8 +71,10 @@ export function SignInPage() {
         </p>
       )}
       <p className="auth-links">
-        <Link to="/auth/sign-up">Create an account</Link>
-        <Link to="/auth/forgot-password">Forgot your password?</Link>
+        <Link to={withReturnTo("/auth/sign-up", returnTo)}>Create an account</Link>
+        <Link to={withReturnTo("/auth/forgot-password", returnTo)}>
+          Forgot your password?
+        </Link>
       </p>
     </AuthShell>
   );
@@ -55,10 +82,16 @@ export function SignInPage() {
 
 export function SignUpPage() {
   const navigate = useNavigate();
+  const returnTo = useSafeReturnTo();
   const [oauthError, setOauthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    analytics.track("sign_up_viewed", { context: "page" });
+  }, []);
+
   return (
     <AuthShell title="Create your account">
-      <EmailPasswordForm mode="sign-up" onSuccess={() => navigate("/")} />
+      <EmailPasswordForm mode="sign-up" onSuccess={() => navigate(returnTo)} />
       <div className="auth-divider" aria-hidden="true">
         or
       </div>
@@ -69,7 +102,9 @@ export function SignUpPage() {
         </p>
       )}
       <p className="auth-links">
-        <Link to="/auth/sign-in">Already have an account? Sign in</Link>
+        <Link to={withReturnTo("/auth/sign-in", returnTo)}>
+          Already have an account? Sign in
+        </Link>
       </p>
     </AuthShell>
   );
@@ -77,6 +112,7 @@ export function SignUpPage() {
 
 export function ForgotPasswordPage() {
   const { requestPasswordReset } = useAuth();
+  const returnTo = useSafeReturnTo();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -127,7 +163,7 @@ export function ForgotPasswordPage() {
         </form>
       )}
       <p className="auth-links">
-        <Link to="/auth/sign-in">Back to sign in</Link>
+        <Link to={withReturnTo("/auth/sign-in", returnTo)}>Back to sign in</Link>
       </p>
     </AuthShell>
   );

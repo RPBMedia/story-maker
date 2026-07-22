@@ -6,11 +6,22 @@ WebAssembly FFmpeg.
 
 **Repository:** https://github.com/RPBMedia/story-maker
 
-## What's new (feature/auth-and-visual-effects)
+## What's new (feature/auth-export-flow)
 
+- **Account entry points from the first screen** — the header shows Sign in /
+  Create account immediately, not just at export time.
+- **Export is never a dead end** — the Generate Video button stays actionable
+  for signed-out users (it opens the account gate) and even when Supabase
+  isn't configured at all (a calm notice with a Retry action replaces the old
+  disabled button + raw technical warning).
 - **Accounts (Supabase)** — email/password, Google and Apple OAuth, password
-  recovery, persistent sessions. The editor stays fully usable without an
-  account; only the final export is account-gated.
+  recovery, persistent sessions, all through a single `AuthContext`. The
+  editor stays fully usable without an account; only the final export is
+  account-gated, decided by a central, extensible export policy.
+- **Future-ready export policy** — `evaluateExportPermission` already models
+  `payment-required` for a future 10-minute free-export limit
+  (`FREE_EXPORT_DURATION_LIMIT_SECONDS`), inert until enforcement is
+  explicitly enabled. No payments are integrated yet.
 - **Cross-fade transitions** — project-wide default plus per-item overrides,
   configurable duration (0.2–3 s), real `xfade` rendering in the output with
   overlap-aware duration math (the video still exactly matches the
@@ -66,46 +77,128 @@ export explain the missing setup instead of breaking.
 
 ## Supabase setup (accounts)
 
+StoryMaker works fully as an editor with **zero** Supabase setup — uploading,
+reordering, effects, and Review are never gated. Without `.env`, the app
+degrades gracefully: the header still shows Sign in / Create account, and the
+Export screen shows a calm "account services are temporarily unavailable"
+notice with a Retry button instead of a raw configuration error. Set up
+Supabase when you want to actually test sign-up, sign-in, and export.
+
 1. **Create the project** at https://supabase.com → New project.
 2. **Copy credentials**: Project Settings → API → copy the *Project URL* and
-   the *anon public* key into `.env` as `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_ANON_KEY`. The anon key is designed to be
-   browser-exposed; the **service-role key must never** appear in this app.
+   the *anon public* key into `.env` (copy `.env.example` first):
+   ```
+   VITE_SUPABASE_URL=https://YOUR-PROJECT-ref.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-public-key
+   ```
+   The anon key is designed to be browser-exposed (Row Level Security is what
+   actually protects data); the **service-role key must never** appear
+   anywhere in this app or repo.
 3. **Apply the database migration**: open the SQL editor and run
    `supabase/migrations/0001_profiles.sql`. It creates the `profiles` table,
    a signup trigger, indexes, and Row Level Security policies (users can read
    and update only their own row; `plan` and `export_count` are
-   client-immutable).
+   client-immutable — see *Export authorization* below).
 4. **Email/password auth**: Authentication → Providers → Email — enabled by
-   default. Decide whether to require email confirmation (both flows are
-   handled by the UI).
+   default.
+   - **Email confirmation**: Authentication → Providers → Email → "Confirm
+     email" toggle. If ON, `signUpWithPassword` returns no session and the
+     sign-up form shows "check your inbox" copy instead of signing the user
+     in immediately — both paths are implemented, so either setting works
+     without further changes.
 5. **Google OAuth**: Authentication → Providers → Google → enable, then
-   create an OAuth client in Google Cloud Console (type “Web application”).
+   create an OAuth client in Google Cloud Console (type "Web application").
    Authorized redirect URI: `https://YOUR-PROJECT-ref.supabase.co/auth/v1/callback`.
    Paste the client ID + secret into Supabase (the secret lives only there,
    never in this repo).
-6. **Apple OAuth**: Authentication → Providers → Apple. Requires an Apple
-   Developer account: create a Services ID, key, and team configuration per
-   Supabase's Apple guide, with the same Supabase callback URL. Without an
-   Apple Developer account this provider cannot be completed — the button is
-   implemented and will surface Supabase's configuration error until then.
-7. **Allowed redirect URLs**: Authentication → URL Configuration → add your
-   dev and production origins (e.g. `http://localhost:5173` and your deploy
-   URL). The app always uses the current origin for callbacks — nothing is
-   hardcoded.
-8. **Troubleshooting OAuth**: a redirect back to a blank page usually means
-   the origin is missing from the allow-list; a provider error page means the
-   provider's own credentials/redirect URI are wrong; “provider is not
-   enabled” means step 5/6 was skipped.
+6. **Apple OAuth**: Authentication → Providers → Apple. **Requires an Apple
+   Developer Program account** (paid): create a Services ID, a Sign in with
+   Apple key, and the team/key IDs per
+   [Supabase's Apple guide](https://supabase.com/docs/guides/auth/social-login/auth-apple),
+   using the same Supabase callback URL as Google above. Without an Apple
+   Developer account this provider cannot be completed — the button is fully
+   implemented and will surface Supabase's own "provider not enabled" error
+   until Apple is configured; nothing is faked.
+7. **Callback / redirect URLs** — local and production:
+   - Authentication → URL Configuration → **Redirect URLs**: add every origin
+     you'll run the app from, e.g. `http://localhost:5173` for local dev and
+     `https://your-deployed-domain.com` for production. The app never
+     hardcodes `localhost` — `authRedirectUrl()` in `src/config/env.ts`
+     always builds redirects from `window.location.origin`, so the same code
+     works in every environment as long as the origin is allow-listed here.
+   - **Password reset redirect**: handled automatically — `requestPasswordReset`
+     sends the user to `<your-origin>/auth/reset-password`; make sure that
+     origin is in the Redirect URLs list too (it's covered by the same-origin
+     entries above, no separate configuration needed).
+8. **Testing authentication locally**:
+   - `npm run dev`, open http://localhost:5173.
+   - Try **Create account** with a real email you can check (or disable email
+     confirmation in step 4 for faster local iteration).
+   - Try **Sign in**, **Forgot password** (check your inbox for the reset
+     link, which opens `/auth/reset-password` on the same origin), and
+     **Sign out** from the header account menu.
+   - Google/Apple require their provider setup (steps 5–6) to actually
+     complete; until then they will show a clear "this sign-in method isn't
+     configured yet" error rather than hanging or crashing.
+9. **Troubleshooting OAuth**: a redirect back to a blank/broken page usually
+   means the origin is missing from the Redirect URLs allow-list (step 7); a
+   provider-hosted error page means the provider's own client ID/secret or
+   redirect URI is wrong; "provider is not enabled" means step 5/6 was
+   skipped in the Supabase dashboard.
 
-### Account model and honesty about enforcement
+### Account access model
 
-Only one rule is enforced today: **you must be signed in to export.** This is
-client-side gating for product validation — a determined user can bypass it.
-Real quota/subscription enforcement will require a trusted backend
-(server-side rendering or signed export jobs). The `profiles` table already
-models `plan` and `export_count` as groundwork, protected by RLS, with both
-columns immutable from the client.
+- The **editor is never gated** — soundtrack, visual media, effects, and
+  Review work fully for anonymous visitors. **Only Export requires an
+  account.**
+- The header shows **Sign in** / **Create account** from the very first
+  screen (not just at export time), so users can authenticate whenever they
+  want without being forced to.
+- Pressing **Generate Video** while signed out opens an in-place account
+  gate — a modal, not a page redirect — so the in-memory project (including
+  selected `File` objects) survives the whole sign-in/sign-up flow. Closing
+  the gate is always available and never destructive.
+- **OAuth is a real page redirect** (Supabase doesn't offer a first-class
+  popup mode), so it reloads the page. The gate warns about this honestly
+  before you click Google/Apple: locally selected files will need to be
+  re-selected afterwards. Email/password sign-in never has this problem.
+
+### Export authorization and future monetization groundwork
+
+Export permission is decided in one place, `src/services/exportPolicy.ts`,
+not scattered across UI components:
+
+```ts
+type ExportPermission =
+  | { status: "allowed" }
+  | { status: "authentication-required" }
+  | { status: "payment-required"; reason: "duration-limit"; thresholdSeconds; projectDurationSeconds }
+  | { status: "quota-exceeded" }
+  | { status: "unavailable"; message: string };
+```
+
+Today, only two outcomes are actually reachable: **signed-in → `allowed`**,
+**signed-out → `authentication-required`**. A third, **`unavailable`**, covers
+the (non-auth) case where Supabase itself isn't reachable/configured, so it
+degrades to a calm message + Retry instead of pretending sign-in would help.
+
+**Prepared but inert:** `FREE_EXPORT_DURATION_LIMIT_SECONDS = 600` and the
+`payment-required` / `duration-limit` variant model the future rule "exports
+over 10 minutes require a paid plan." `evaluateExportPermission` already
+accepts the project's duration and contains the comparison, gated behind an
+`ENFORCE_DURATION_LIMIT = false` constant — so wiring up payment later is a
+one-line flip plus a UI for the `payment-required` case, not a redesign.
+**No payment is enforced today**, at any project length.
+
+The `profiles` table already models `plan` and `export_count` as further
+groundwork, protected by Row Level Security, with both columns immutable from
+the client (only a trusted backend could change them safely).
+
+**Honesty about enforcement:** this is client-side gating for product
+validation, not hardened billing. A determined user can bypass it in
+DevTools. Real quota/subscription/duration enforcement will require a
+trusted backend — server-side rendering or signed, server-verified export
+jobs — before any of this becomes a real paywall.
 
 ## Project structure
 
@@ -235,16 +328,47 @@ exports.
 npm run test
 ```
 
-34 tests cover: duration allocation (images-only, videos-only, interleaving,
-sub-minimum image time, trimming, freeze-tail, rounding drift), reducer
-behavior (ordering, removal + URL revocation, render lifecycle,
-duplicate-start protection, cancellation, reset), file validation and
-duplicate detection, and app-shell behavior (stage navigation, Generate
-gating, empty states).
+109 tests cover, among other things:
+
+- **Pure logic**: duration allocation (images-only, videos-only,
+  interleaving, sub-minimum image time, trimming, freeze-tail, rounding
+  drift), the cross-fade timeline (overlap math, clamping, offsets),
+  render-time estimation categories, and export-policy decisions.
+- **Reducer behavior**: ordering, removal + URL revocation, render
+  lifecycle, duplicate-start protection, cancellation, reset, effect
+  settings.
+- **Authentication and export gating** (`ExportStage.test.tsx`,
+  `AccountMenu.test.tsx`): signed-out users get an actionable (never
+  disabled-with-no-recourse) Generate Video button; clicking it opens the
+  account gate; a genuine sign-in/sign-up transition inside the gate closes
+  it and enables Start Rendering; signing out re-locks export; a loading
+  session is never treated as signed in; authentication errors and modal
+  dismissal both preserve the in-progress project untouched.
+- **Configuration handling** (`ExportConfiguration.test.tsx`,
+  `AuthForms.test.tsx`, `config/env.test.ts`): a genuinely unconfigured
+  Supabase backend never crashes the app, never leaks environment-variable
+  names into the primary UI, always offers a Retry action, and still shows
+  the DEV-only technical diagnostic where that's actually useful (inside the
+  auth forms themselves).
+- **Editor access** (`EditorAccess.test.tsx`): every step — Soundtrack,
+  Visual media (incl. per-item effect overrides), Review (incl. project-wide
+  transition/zoom defaults), and reaching Export — works fully for
+  signed-out visitors.
+
+Auth tests use a small reactive mock store (`src/test/helpers.tsx`,
+`useSyncExternalStore`-based) shared across every component in a render
+tree, so a test can simulate one real sign-in and observe the *same* update
+propagate to both the form that triggered it and the screen that was
+waiting on it — the same guarantee the real Supabase-backed context gives.
 
 ## Roadmap ideas
 
-Transitions, custom image durations, trim controls, text overlays / title
-cards, multiple audio layers with volume control, project persistence
-(metadata is already separated from `File` handles), undo/redo, timeline
-editing, 1080p output, and cloud rendering for long projects.
+Payments/subscriptions (the `payment-required` export status and 10-minute
+threshold are modeled but inert — see *Export authorization* above), "My
+Projects" / usage / account settings pages (menu entries already reserved in
+the header), additional transition types (fade-through-black, slide, wipe,
+dip-to-white, blur dissolve — the `TransitionType` union is built to grow),
+custom image durations, trim controls, text overlays / title cards, multiple
+audio layers with volume control, project persistence (metadata is already
+separated from `File` handles), undo/redo, timeline editing, 1080p output,
+and cloud/server-side rendering for long projects and real quota enforcement.

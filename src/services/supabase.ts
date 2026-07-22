@@ -1,5 +1,7 @@
 /** Supabase client singleton. Null when the environment is not configured —
- * the app must keep working (editor fully usable) without it. */
+ * the app must keep working (editor fully usable) without it; account
+ * features degrade to a calm "temporarily unavailable" message instead of
+ * a raw configuration error (see exportPolicy.ts and AuthContext.tsx). */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config/env";
 

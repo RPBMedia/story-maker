@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useProject } from "../../state/ProjectContext";
 import { useAuth } from "../auth/AuthContext";
 import { AccountGateModal } from "../auth/AccountGateModal";
+import { AccountUnavailableNotice } from "../auth/AuthForms";
 import { evaluateExportPermission } from "../../services/exportPolicy";
 import { analytics } from "../../services/analytics";
 import {
@@ -31,7 +32,9 @@ export function ExportStage() {
 
   const { renderStatus, renderProgress, result, error } = state;
   const rendering = renderStatus === "rendering";
-  const permission = evaluateExportPermission(auth);
+  // Project duration is passed through so the (currently inert) future
+  // duration-based paywall check has real data to work with once enabled.
+  const permission = evaluateExportPermission(auth, timeline.total);
 
   const estimate =
     timeline.segments.length > 0
@@ -119,11 +122,18 @@ export function ExportStage() {
 
   function onGenerateClick() {
     analytics.track("export_attempted");
-    if (permission.kind === "auth-required") {
+    // Loading and unavailable are not actionable from this button — loading
+    // resolves on its own within moments, and unavailable has its own Retry
+    // affordance in the notice above. Only authentication-required routes
+    // through this click.
+    if (auth.status === "loading" || permission.status === "unavailable") {
+      return;
+    }
+    if (permission.status === "authentication-required") {
       setGateOpen(true);
       return;
     }
-    if (permission.kind !== "allowed") return; // reason rendered below
+    if (permission.status !== "allowed") return; // future statuses: no-op for now
     if (!state.exportConfirmed) return; // confirmation panel handles start
     void startRender();
   }
@@ -154,7 +164,7 @@ export function ExportStage() {
     !rendering &&
     !result &&
     isValid &&
-    permission.kind === "allowed" &&
+    permission.status === "allowed" &&
     !state.exportConfirmed;
 
   const activeTransitions = timeline.boundaries.filter(
@@ -163,6 +173,11 @@ export function ExportStage() {
   const zoomedItems = timeline.segments.filter(
     (s) => s.zoom.type !== "none",
   ).length;
+
+  const generateDisabled =
+    !isValid || auth.status === "loading" || permission.status === "unavailable";
+  const generateLabel =
+    isValid && auth.status === "loading" ? "Checking your account…" : "Generate Video";
 
   return (
     <section aria-labelledby="export-title">
@@ -180,15 +195,9 @@ export function ExportStage() {
         <>
           <RenderTimeInfo estimate={estimate} />
 
-          {permission.kind === "temporarily-unavailable" && (
-            <div className="warnings" role="note">
-              <strong>Export is unavailable:</strong> {permission.reason}
-            </div>
-          )}
-
-          {showConfirmation ? (
-            <div className="confirm-panel card">
-              <h3 className="section-title">Ready to render?</h3>
+          {timeline.segments.length > 0 && (
+            <div className="card export-summary">
+              <h3 className="section-title">Project summary</h3>
               <dl className="confirm-grid">
                 <div>
                   <dt>Output duration</dt>
@@ -218,6 +227,43 @@ export function ExportStage() {
                   <dd>{estimate?.label ?? "around 5–15 minutes"}</dd>
                 </div>
               </dl>
+            </div>
+          )}
+
+          {/* Authentication-state notice: a separate, calm concern from
+              render-time guidance above — never combined, never styled as
+              a warning/error for the normal signed-out state. */}
+          {permission.status === "unavailable" && (
+            <AccountUnavailableNotice message={permission.message} />
+          )}
+          {permission.status === "authentication-required" && isValid && (
+            <div className="account-notice" role="status">
+              <span className="account-notice__icon" aria-hidden="true">
+                🔐
+              </span>
+              <p className="account-notice__title">
+                Sign in or create a free account to render and download this
+                video.
+              </p>
+            </div>
+          )}
+          {permission.status === "allowed" && (
+            <div className="account-notice account-notice--ready" role="status">
+              <span className="account-notice__icon" aria-hidden="true">
+                ✓
+              </span>
+              <p className="account-notice__title">
+                Signed in as {auth.email}. Your video is ready to render.
+              </p>
+            </div>
+          )}
+
+          {showConfirmation ? (
+            <div className="confirm-panel card">
+              <h3 className="section-title">Ready to render?</h3>
+              <p className="stage-sub">
+                This usually takes {estimate?.label ?? "around 5–15 minutes"}.
+              </p>
               <div className="result__actions">
                 <button
                   type="button"
@@ -240,19 +286,14 @@ export function ExportStage() {
               <button
                 type="button"
                 className="btn btn--primary btn--large"
-                disabled={!isValid || permission.kind === "temporarily-unavailable"}
+                disabled={generateDisabled}
                 onClick={onGenerateClick}
               >
-                Generate Video
+                {generateLabel}
               </button>
               {!isValid && (
                 <p className="warning-inline" role="note">
                   Add at least one audio track and one visual item first.
-                </p>
-              )}
-              {permission.kind === "auth-required" && isValid && (
-                <p className="stage-sub">
-                  You'll be asked to sign in — your project stays put.
                 </p>
               )}
             </div>
@@ -376,6 +417,15 @@ export function ExportStage() {
         </button>
       </div>
 
+      {/*
+        No `pendingAction`/returnTo state is needed here: this gate only ever
+        opens FROM the Export screen and is modal (not a route change), so
+        the project state and the Export screen are never left. Once auth
+        flips to "allowed" the permission check above re-evaluates on the
+        very next render and the confirmation panel appears automatically —
+        rendering still requires the explicit "Start Rendering" click, so
+        signing in never silently kicks off a multi-minute render.
+      */}
       <AccountGateModal open={gateOpen} onClose={() => setGateOpen(false)} />
     </section>
   );

@@ -6,14 +6,50 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "./AuthContext";
 import { config } from "../../config/env";
 
+/** Inline note shown near auth forms when Supabase isn't configured.
+ *
+ * DEV: names the exact missing variables so the developer can fix it fast.
+ * PROD: calm, non-technical — this is what a real visitor would ever see,
+ * so it must never leak configuration details (see the "Missing Supabase
+ * configuration" requirement). */
 export function AuthUnconfiguredNote() {
   if (config.authConfigured) return null;
+  if (import.meta.env.DEV) {
+    return (
+      <p className="auth-note" role="note">
+        <strong>Developer note:</strong> Supabase isn't configured — missing{" "}
+        <code>{config.missingEnvVars.join("</code>, <code>")}</code>. Copy{" "}
+        <code>.env.example</code> to <code>.env</code> and fill in your
+        project values (README → Supabase setup).
+      </p>
+    );
+  }
   return (
     <p className="auth-note" role="note">
-      Account features aren't configured in this environment. Add
-      <code> VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code>{" "}
-      to <code>.env</code> — see the README for setup.
+      Account services are temporarily unavailable. Please try again shortly.
     </p>
+  );
+}
+
+/** Calm, non-error banner for the Export screen when account services are
+ * unreachable — distinct in tone and placement from render-time guidance. */
+export function AccountUnavailableNotice({ message }: { message: string }) {
+  return (
+    <div className="account-notice account-notice--unavailable" role="status">
+      <span className="account-notice__icon" aria-hidden="true">
+        🔧
+      </span>
+      <div>
+        <p className="account-notice__title">{message}</p>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          onClick={() => window.location.reload()}
+        >
+          Retry
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -13,8 +13,20 @@ import { config, authRedirectUrl } from "../../config/env";
 import { analytics } from "../../services/analytics";
 import type { AuthState, UserProfile } from "../../types";
 
+/** Calm, non-technical copy for "the auth backend genuinely isn't reachable
+ * right now" — never names environment variables. The DEV-only technical
+ * detail lives solely in config/env.ts's console diagnostic. */
+export const ACCOUNT_SERVICE_UNAVAILABLE =
+  "Account services are temporarily unavailable. Please try again shortly.";
+
 export interface AuthApi {
+  /** Status, user id, email, and (once loaded) profile row. */
   auth: AuthState;
+  /** Convenience flag: auth.status === "loading". */
+  loading: boolean;
+  /** The raw Supabase session (tokens etc.), when signed in. Kept separate
+   * from AuthState so the app-wide state model stays simple/serializable. */
+  session: Session | null;
   signInWithPassword(email: string, password: string): Promise<string | null>;
   signUpWithPassword(email: string, password: string): Promise<string | null>;
   signInWithOAuth(provider: "google" | "apple"): Promise<string | null>;
@@ -43,16 +55,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? { status: "loading", userId: null, email: null, profile: null }
       : { status: "unconfigured", userId: null, email: null, profile: null },
   );
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
     let disposed = false;
 
     supabase.auth.getSession().then(({ data }) => {
-      if (!disposed) setAuth(stateFromSession(data.session));
+      if (disposed) return;
+      setAuth(stateFromSession(data.session));
+      setSession(data.session);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!disposed) setAuth(stateFromSession(session));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (disposed) return;
+      setAuth(stateFromSession(session));
+      setSession(session);
+      // Supabase records which provider authenticated the session, so this
+      // fires correctly even after a real OAuth redirect reloads the page
+      // (no in-memory "pending" flag would survive that reload).
+      const provider = session?.user.app_metadata?.provider;
+      if (event === "SIGNED_IN" && provider && provider !== "email") {
+        analytics.track("oauth_completed", { provider });
+      }
     });
     return () => {
       disposed = true;
@@ -91,12 +115,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
-      if (!supabase) return "Authentication is not configured.";
+      if (!supabase) return ACCOUNT_SERVICE_UNAVAILABLE;
+      analytics.track("sign_in_started", { method: "password" });
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      if (error) return humanAuthError(error);
+      if (error) {
+        analytics.track("sign_in_failed", { method: "password" });
+        return humanAuthError(error);
+      }
       analytics.track("sign_in_completed", { method: "password" });
       return null;
     },
@@ -105,14 +133,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUpWithPassword = useCallback(
     async (email: string, password: string) => {
-      if (!supabase) return "Authentication is not configured.";
+      if (!supabase) return ACCOUNT_SERVICE_UNAVAILABLE;
       analytics.track("sign_up_started", { method: "password" });
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: authRedirectUrl("/") },
       });
-      if (error) return humanAuthError(error);
+      if (error) {
+        analytics.track("sign_up_failed", { method: "password" });
+        return humanAuthError(error);
+      }
       analytics.track("sign_up_completed", { method: "password" });
       // When email confirmation is enabled, no session exists yet.
       if (!data.session) {
@@ -125,19 +156,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithOAuth = useCallback(
     async (provider: "google" | "apple") => {
-      if (!supabase) return "Authentication is not configured.";
+      if (!supabase) return ACCOUNT_SERVICE_UNAVAILABLE;
+      analytics.track("oauth_started", { provider });
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: { redirectTo: authRedirectUrl("/") },
       });
-      if (error) return humanAuthError(error);
-      return null; // browser is about to navigate away
+      if (error) {
+        analytics.track("oauth_failed", { provider });
+        return humanAuthError(error);
+      }
+      // Success here just means the redirect was initiated; the browser is
+      // about to navigate away, so "oauth_completed" fires from the
+      // onAuthStateChange handler once the session actually lands.
+      return null;
     },
     [],
   );
 
   const requestPasswordReset = useCallback(async (email: string) => {
-    if (!supabase) return "Authentication is not configured.";
+    if (!supabase) return ACCOUNT_SERVICE_UNAVAILABLE;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: authRedirectUrl("/auth/reset-password"),
     });
@@ -146,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updatePassword = useCallback(async (newPassword: string) => {
-    if (!supabase) return "Authentication is not configured.";
+    if (!supabase) return ACCOUNT_SERVICE_UNAVAILABLE;
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) return humanAuthError(error);
     return null;
@@ -159,6 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthApi>(
     () => ({
       auth,
+      loading: auth.status === "loading",
+      session,
       signInWithPassword,
       signUpWithPassword,
       signInWithOAuth,
@@ -168,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       auth,
+      session,
       signInWithPassword,
       signUpWithPassword,
       signInWithOAuth,

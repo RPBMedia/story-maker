@@ -278,10 +278,22 @@ export interface AuthState {
   profile: UserProfile | null;
 }
 
-/** Central export authorization result (extensible for monetization). */
+/**
+ * Central export authorization result (extensible for monetization).
+ *
+ * `payment-required` with `reason: "duration-limit"` is groundwork for a
+ * future rule — see FREE_EXPORT_DURATION_LIMIT_SECONDS in exportPolicy.ts.
+ * It is modeled here so the UI can render it correctly whenever it starts
+ * appearing, but exportPolicy.ts never returns it in this iteration.
+ */
 export type ExportPermission =
-  | { kind: "allowed" }
-  | { kind: "auth-required" }
-  | { kind: "quota-exceeded"; reason: string }
-  | { kind: "subscription-required"; reason: string }
-  | { kind: "temporarily-unavailable"; reason: string };
+  | { status: "allowed" }
+  | { status: "authentication-required" }
+  | {
+      status: "payment-required";
+      reason: "duration-limit";
+      thresholdSeconds: number;
+      projectDurationSeconds: number;
+    }
+  | { status: "quota-exceeded" }
+  | { status: "unavailable"; message: string };

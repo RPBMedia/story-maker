@@ -1,8 +1,14 @@
-/** Compact header account control: avatar/email + menu with sign-out and
- * placeholders for future account areas. */
+/** Header authentication control.
+ *
+ * Signed out (or account services unavailable): a compact "Sign in" /
+ * "Create account" pair, visible from the very first screen — not gated
+ * behind any editor step. Signed in: avatar/email + menu with sign-out and
+ * placeholders for future account areas.
+ */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { analytics } from "../../services/analytics";
 
 export function AccountMenu() {
   const { auth, signOut } = useAuth();
@@ -20,20 +26,41 @@ export function AccountMenu() {
     return () => window.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  if (auth.status === "unconfigured") return null;
   if (auth.status === "loading") {
-    return <span className="account-loading" aria-hidden="true" />;
-  }
-  if (auth.status === "signed-out") {
     return (
-      <Link className="btn btn--secondary" to="/auth/sign-in">
-        Sign in
-      </Link>
+      <span
+        className="account-loading"
+        aria-hidden="true"
+        title="Checking your account…"
+      />
     );
   }
 
-  const label =
-    auth.profile?.displayName || auth.email || "Account";
+  // "unconfigured" is treated the same as signed-out for entry-point
+  // purposes: the buttons are always present; the destination page explains
+  // any unavailability gracefully rather than hiding the entry point.
+  if (auth.status === "signed-out" || auth.status === "unconfigured") {
+    return (
+      <div className="auth-entry">
+        <Link
+          className="btn btn--secondary"
+          to="/auth/sign-in"
+          onClick={() => analytics.track("auth_entry_clicked", { action: "sign-in" })}
+        >
+          Sign in
+        </Link>
+        <Link
+          className="btn btn--primary"
+          to="/auth/sign-up"
+          onClick={() => analytics.track("auth_entry_clicked", { action: "sign-up" })}
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+  const label = auth.profile?.displayName || auth.email || "Account";
   const initial = (label[0] ?? "?").toUpperCase();
 
   return (
@@ -62,6 +89,9 @@ export function AccountMenu() {
           </button>
           <button type="button" role="menuitem" className="account__item" disabled>
             Usage (coming soon)
+          </button>
+          <button type="button" role="menuitem" className="account__item" disabled>
+            Subscription (coming soon)
           </button>
           <button type="button" role="menuitem" className="account__item" disabled>
             Account Settings (coming soon)
