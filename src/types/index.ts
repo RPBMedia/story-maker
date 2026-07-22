@@ -63,7 +63,9 @@ export type RenderStage =
   | "reading-metadata"
   | "preparing-soundtrack"
   | "preparing-images"
+  | "applying-zoom"
   | "normalizing-videos"
+  | "building-transitions"
   | "building-sequence"
   | "combining"
   | "finalizing";
@@ -74,7 +76,9 @@ export const RENDER_STAGE_LABELS: Record<RenderStage, string> = {
   "reading-metadata": "Reading media metadata",
   "preparing-soundtrack": "Preparing soundtrack",
   "preparing-images": "Preparing images",
+  "applying-zoom": "Applying zoom effects",
   "normalizing-videos": "Normalizing video clips",
+  "building-transitions": "Building transitions",
   "building-sequence": "Building visual sequence",
   combining: "Combining audio and video",
   finalizing: "Finalizing output",
@@ -127,3 +131,169 @@ export interface DurationPlan {
   /** True when videos alone exceeded the soundtrack and were trimmed. */
   trimmed: boolean;
 }
+
+// ---- visual effects ---------------------------------------------------------
+
+export type TransitionType = "none" | "crossfade";
+
+export interface TransitionSettings {
+  type: TransitionType;
+  /** Seconds; only meaningful for type !== "none". */
+  duration: number;
+}
+
+export const TRANSITION_LIMITS = {
+  min: 0.2,
+  max: 3,
+  step: 0.05,
+  default: 0.75,
+  /** A boundary's crossfade may consume at most this fraction of the shorter
+   * neighboring segment. */
+  maxNeighborFraction: 0.45,
+} as const;
+
+export const DEFAULT_TRANSITION: TransitionSettings = {
+  type: "none",
+  duration: TRANSITION_LIMITS.default,
+};
+
+export type ZoomEffectType = "none" | "zoom-in" | "zoom-out";
+
+export interface ZoomEffectSettings {
+  type: ZoomEffectType;
+  /** Final (or initial, for zoom-out) scale factor, e.g. 1.04. */
+  amount: number;
+}
+
+export const ZOOM_LIMITS = {
+  min: 1.01,
+  max: 1.1,
+  step: 0.01,
+  default: 1.04,
+} as const;
+
+export const DEFAULT_ZOOM: ZoomEffectSettings = {
+  type: "none",
+  amount: ZOOM_LIMITS.default,
+};
+
+/** Per-item overrides; null/undefined = use the project default. */
+export interface VisualEffectOverrides {
+  transition?: TransitionSettings | null;
+  zoom?: ZoomEffectSettings | null;
+}
+
+// ---- effect-aware timeline --------------------------------------------------
+
+/** One boundary between segment i and i+1 (the transition AFTER item i). */
+export interface TransitionBoundary {
+  afterIndex: number;
+  type: TransitionType;
+  /** Requested duration before clamping. */
+  requested: number;
+  /** Actual overlap used (0 when type === "none"). */
+  overlap: number;
+  clamped: boolean;
+}
+
+export interface TimelineSegment {
+  item: VisualMediaItem;
+  /** Raw segment duration on its own clock. */
+  duration: number;
+  /** For videos: trim source to this many seconds. */
+  trimTo?: number;
+  /** Effective placement on the shared output clock. */
+  start: number;
+  end: number;
+  /** Resolved zoom effect for this item. */
+  zoom: ZoomEffectSettings;
+}
+
+export interface EffectiveTimeline {
+  segments: TimelineSegment[];
+  boundaries: TransitionBoundary[];
+  /** Sum of active overlaps. */
+  totalOverlap: number;
+  /** Final output duration; equals soundtrack duration when valid. */
+  total: number;
+  freezeTail: number;
+  trimmed: boolean;
+  /** True when any requested transition duration had to be clamped. */
+  anyClamped: boolean;
+}
+
+// ---- render-time estimation ---------------------------------------------------
+
+export type RenderTimeCategory = "short" | "medium" | "long";
+
+export interface RenderTimeEstimate {
+  category: RenderTimeCategory;
+  /** Human copy, e.g. "around 5 minutes". */
+  label: string;
+  /** Factors that pushed the estimate up (for UI explanation). */
+  factors: string[];
+}
+
+export interface RenderTimingState {
+  startedAt: number | null;
+  elapsedMs: number;
+  /** Milliseconds; null until enough real progress exists to infer one. */
+  estimatedRemainingMs: number | null;
+}
+
+// ---- auth / accounts ----------------------------------------------------------
+
+export type PlanId = "free" | "creator" | "professional";
+
+/** Extensible entitlement model — NOT enforced yet (groundwork only). */
+export interface PlanEntitlements {
+  plan: PlanId;
+  exportQuotaPerMonth: number | null; // null = unlimited
+  maxResolution: { width: number; height: number };
+  watermark: boolean;
+  maxProjectDurationSeconds: number | null;
+  storageBytes: number | null;
+  serverRendering: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  plan: PlanId;
+  exportCount: number;
+}
+
+export type AuthStatus =
+  | "loading"
+  | "signed-out"
+  | "signed-in"
+  | "unconfigured";
+
+export interface AuthState {
+  status: AuthStatus;
+  userId: string | null;
+  email: string | null;
+  profile: UserProfile | null;
+}
+
+/**
+ * Central export authorization result (extensible for monetization).
+ *
+ * `payment-required` with `reason: "duration-limit"` is groundwork for a
+ * future rule — see FREE_EXPORT_DURATION_LIMIT_SECONDS in exportPolicy.ts.
+ * It is modeled here so the UI can render it correctly whenever it starts
+ * appearing, but exportPolicy.ts never returns it in this iteration.
+ */
+export type ExportPermission =
+  | { status: "allowed" }
+  | { status: "authentication-required" }
+  | {
+      status: "payment-required";
+      reason: "duration-limit";
+      thresholdSeconds: number;
+      projectDurationSeconds: number;
+    }
+  | { status: "quota-exceeded" }
+  | { status: "unavailable"; message: string };

@@ -5,9 +5,16 @@ import type {
   RenderResult,
   RenderSettings,
   RenderStatus,
+  TransitionSettings,
+  VisualEffectOverrides,
   VisualMediaItem,
+  ZoomEffectSettings,
 } from "../types";
-import { DEFAULT_RENDER_SETTINGS } from "../types";
+import {
+  DEFAULT_RENDER_SETTINGS,
+  DEFAULT_TRANSITION,
+  DEFAULT_ZOOM,
+} from "../types";
 
 export type StageId = "soundtrack" | "media" | "review" | "export";
 
@@ -23,6 +30,13 @@ export interface ProjectState {
   audioTracks: AudioTrack[];
   visualItems: VisualMediaItem[];
   settings: RenderSettings;
+  /** Project-wide effect defaults; items may override (null = inherit). */
+  projectTransition: TransitionSettings;
+  projectZoom: ZoomEffectSettings;
+  effectOverrides: Record<string, VisualEffectOverrides | undefined>;
+  /** True once the pre-render confirmation was accepted for the current
+   * configuration; cleared when the configuration changes. */
+  exportConfirmed: boolean;
   renderStatus: RenderStatus;
   renderProgress: RenderProgress;
   result: RenderResult | null;
@@ -36,6 +50,10 @@ export const initialProjectState: ProjectState = {
   audioTracks: [],
   visualItems: [],
   settings: DEFAULT_RENDER_SETTINGS,
+  projectTransition: DEFAULT_TRANSITION,
+  projectZoom: DEFAULT_ZOOM,
+  effectOverrides: {},
+  exportConfirmed: false,
   renderStatus: "idle",
   renderProgress: { stage: "idle", overall: 0 },
   result: null,
@@ -51,6 +69,11 @@ export type ProjectAction =
   | { type: "add-visual"; items: VisualMediaItem[] }
   | { type: "remove-visual"; id: string }
   | { type: "reorder-visual"; from: number; to: number }
+  | { type: "set-project-transition"; transition: TransitionSettings }
+  | { type: "set-project-zoom"; zoom: ZoomEffectSettings }
+  | { type: "set-item-transition"; id: string; transition: TransitionSettings | null }
+  | { type: "set-item-zoom"; id: string; zoom: ZoomEffectSettings | null }
+  | { type: "confirm-export" }
   | { type: "add-notices"; notices: string[] }
   | { type: "dismiss-notices" }
   | { type: "render-started" }
@@ -97,13 +120,18 @@ export function projectReducer(
       return { ...state, stage: action.stage };
 
     case "add-audio":
-      return { ...state, audioTracks: [...state.audioTracks, ...action.tracks] };
+      return {
+        ...state,
+        exportConfirmed: false,
+        audioTracks: [...state.audioTracks, ...action.tracks],
+      };
 
     case "remove-audio": {
       const track = state.audioTracks.find((t) => t.id === action.id);
       if (track) URL.revokeObjectURL(track.previewUrl);
       return {
         ...state,
+        exportConfirmed: false,
         audioTracks: state.audioTracks.filter((t) => t.id !== action.id),
       };
     }
@@ -114,13 +142,18 @@ export function projectReducer(
     }
 
     case "add-visual":
-      return { ...state, visualItems: [...state.visualItems, ...action.items] };
+      return {
+        ...state,
+        exportConfirmed: false,
+        visualItems: [...state.visualItems, ...action.items],
+      };
 
     case "remove-visual": {
       const item = state.visualItems.find((i) => i.id === action.id);
       if (item) URL.revokeObjectURL(item.previewUrl);
       return {
         ...state,
+        exportConfirmed: false,
         visualItems: state.visualItems.filter((i) => i.id !== action.id),
       };
     }
@@ -129,6 +162,45 @@ export function projectReducer(
       const moved = move(state.visualItems, action.from, action.to);
       return moved === state.visualItems ? state : { ...state, visualItems: moved };
     }
+
+    case "set-project-transition":
+      return {
+        ...state,
+        projectTransition: action.transition,
+        exportConfirmed: false,
+      };
+
+    case "set-project-zoom":
+      return { ...state, projectZoom: action.zoom, exportConfirmed: false };
+
+    case "set-item-transition":
+      return {
+        ...state,
+        exportConfirmed: false,
+        effectOverrides: {
+          ...state.effectOverrides,
+          [action.id]: {
+            ...state.effectOverrides[action.id],
+            transition: action.transition,
+          },
+        },
+      };
+
+    case "set-item-zoom":
+      return {
+        ...state,
+        exportConfirmed: false,
+        effectOverrides: {
+          ...state.effectOverrides,
+          [action.id]: {
+            ...state.effectOverrides[action.id],
+            zoom: action.zoom,
+          },
+        },
+      };
+
+    case "confirm-export":
+      return { ...state, exportConfirmed: true };
 
     case "add-notices":
       return { ...state, notices: [...state.notices, ...action.notices] };

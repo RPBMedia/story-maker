@@ -6,17 +6,23 @@ import { useDragReorder } from "../../hooks/useDragReorder";
 import { probeAV, probeImage } from "../../services/metadata";
 import { classifyFile, isDuplicate } from "../../utils/validation";
 import { formatBytes, formatSeconds } from "../../utils/format";
-import type { VisualMediaItem } from "../../types";
+import {
+  TRANSITION_LIMITS,
+  ZOOM_LIMITS,
+  type TransitionType,
+  type VisualMediaItem,
+  type ZoomEffectType,
+} from "../../types";
 
 export function MediaStage() {
-  const { state, dispatch, plan, soundtrackDuration } = useProject();
+  const { state, dispatch, timeline, soundtrackDuration } = useProject();
   const [busy, setBusy] = useState(false);
   const reorder = useDragReorder((from, to) =>
     dispatch({ type: "reorder-visual", from, to }),
   );
 
   const allocated = new Map(
-    plan.segments.map((s) => [s.item.id, s.duration] as const),
+    timeline.segments.map((s) => [s.item.id, s.duration] as const),
   );
 
   async function addFiles(files: File[]) {
@@ -170,6 +176,7 @@ export function MediaStage() {
                           : "–"}
                     </strong>
                   </span>
+                  <ItemEffects itemId={item.id} isLast={i === state.visualItems.length - 1} />
                 </div>
               </div>
             </SortableCard>
@@ -177,5 +184,129 @@ export function MediaStage() {
         </ul>
       )}
     </section>
+  );
+}
+
+
+/** Per-item effect overrides. Null override = inherit the project default.
+ * The transition belongs to the boundary AFTER this item, so the last item
+ * offers no outgoing-transition control. */
+function ItemEffects({ itemId, isLast }: { itemId: string; isLast: boolean }) {
+  const { state, dispatch } = useProject();
+  const o = state.effectOverrides[itemId];
+  const tValue =
+    o?.transition === undefined || o.transition === null
+      ? "default"
+      : o.transition.type;
+  const zValue =
+    o?.zoom === undefined || o.zoom === null ? "default" : o.zoom.type;
+
+  return (
+    <details className="item-effects">
+      <summary>Effects</summary>
+      <div className="item-effects__body">
+        {!isLast && (
+          <label className="field field--inline">
+            <span>Transition after this item</span>
+            <select
+              value={tValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                dispatch({
+                  type: "set-item-transition",
+                  id: itemId,
+                  transition:
+                    v === "default"
+                      ? null
+                      : {
+                          type: v as TransitionType,
+                          duration:
+                            o?.transition?.duration ??
+                            state.projectTransition.duration,
+                        },
+                });
+              }}
+            >
+              <option value="default">Use project default</option>
+              <option value="none">No transition</option>
+              <option value="crossfade">Cross-fade</option>
+            </select>
+          </label>
+        )}
+        {!isLast && tValue === "crossfade" && (
+          <label className="field field--inline">
+            <span>
+              Duration: {(o?.transition?.duration ?? TRANSITION_LIMITS.default).toFixed(2)}s
+            </span>
+            <input
+              type="range"
+              min={TRANSITION_LIMITS.min}
+              max={TRANSITION_LIMITS.max}
+              step={TRANSITION_LIMITS.step}
+              value={o?.transition?.duration ?? TRANSITION_LIMITS.default}
+              onChange={(e) =>
+                dispatch({
+                  type: "set-item-transition",
+                  id: itemId,
+                  transition: {
+                    type: "crossfade",
+                    duration: Number(e.target.value),
+                  },
+                })
+              }
+            />
+          </label>
+        )}
+        <label className="field field--inline">
+          <span>Subtle zoom</span>
+          <select
+            value={zValue}
+            onChange={(e) => {
+              const v = e.target.value;
+              dispatch({
+                type: "set-item-zoom",
+                id: itemId,
+                zoom:
+                  v === "default"
+                    ? null
+                    : {
+                        type: v as ZoomEffectType,
+                        amount: o?.zoom?.amount ?? state.projectZoom.amount,
+                      },
+              });
+            }}
+          >
+            <option value="default">Use project default</option>
+            <option value="none">Off</option>
+            <option value="zoom-in">Zoom in</option>
+            <option value="zoom-out">Zoom out</option>
+          </select>
+        </label>
+        {zValue !== "default" && zValue !== "none" && (
+          <label className="field field--inline">
+            <span>
+              Amount: {Math.round(((o?.zoom?.amount ?? ZOOM_LIMITS.default) - 1) * 100)}%
+            </span>
+            <input
+              type="range"
+              min={ZOOM_LIMITS.min}
+              max={ZOOM_LIMITS.max}
+              step={ZOOM_LIMITS.step}
+              value={o?.zoom?.amount ?? ZOOM_LIMITS.default}
+              onChange={(e) =>
+                dispatch({
+                  type: "set-item-zoom",
+                  id: itemId,
+                  zoom: {
+                    type: zValue as ZoomEffectType,
+                    amount: Number(e.target.value),
+                  },
+                })
+              }
+            />
+          </label>
+        )}
+      </div>
+    </details>
   );
 }

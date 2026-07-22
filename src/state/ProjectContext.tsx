@@ -14,16 +14,16 @@ import {
   type ProjectAction,
   type ProjectState,
 } from "./projectReducer";
-import { allocateDurations } from "../utils/duration";
-import type { DurationPlan } from "../types";
+import { buildTimeline } from "../utils/timeline";
+import type { EffectiveTimeline } from "../types";
 
 interface ProjectContextValue {
   state: ProjectState;
   dispatch: Dispatch<ProjectAction>;
-  /** Derived, always in sync with audio + visual state. */
+  /** Derived, always in sync with audio + visual + effect state. */
   soundtrackDuration: number;
   totalBytes: number;
-  plan: DurationPlan;
+  timeline: EffectiveTimeline;
   isValid: boolean;
 }
 
@@ -34,13 +34,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ProjectContextValue>(() => {
     const duration = soundtrackDuration(state);
-    const plan = allocateDurations(duration, state.visualItems);
+    const timeline = buildTimeline({
+      soundtrackDuration: duration,
+      items: state.visualItems,
+      overrides: state.effectOverrides,
+      projectTransition: state.projectTransition,
+      projectZoom: state.projectZoom,
+    });
     return {
       state,
       dispatch,
       soundtrackDuration: duration,
       totalBytes: totalUploadedBytes(state),
-      plan,
+      timeline,
       isValid: state.audioTracks.length > 0 && state.visualItems.length > 0,
     };
   }, [state]);
