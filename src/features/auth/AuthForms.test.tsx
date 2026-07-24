@@ -1,12 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { AuthUnconfiguredNote, AccountUnavailableNotice } from "./AuthForms";
 
+// Force the "unconfigured" state explicitly so this test is robust whether or
+// not a developer has a real .env on disk (vitest loads .env via Vite).
+vi.mock("../../config/env", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../config/env")>("../../config/env");
+  return {
+    ...actual,
+    config: {
+      ...actual.config,
+      authConfigured: false,
+      missingEnvVars: ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"],
+    },
+  };
+});
+
 describe("AuthUnconfiguredNote", () => {
   it("in development mode, names the missing variables as a developer diagnostic", () => {
-    // Vitest runs with import.meta.env.DEV === true by default, and no real
-    // .env exists in this repo/test environment, so config.authConfigured
-    // is false here — exercising the real default path.
+    // import.meta.env.DEV is true under vitest, and config is mocked
+    // unconfigured above → the DEV developer-diagnostic branch renders.
     render(<AuthUnconfiguredNote />);
     const note = screen.getByRole("note");
     expect(note.textContent).toMatch(/Developer note/i);

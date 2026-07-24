@@ -64,7 +64,10 @@ export function SignInPage() {
       <div className="auth-divider" aria-hidden="true">
         or
       </div>
-      <OAuthButtons onError={setOauthError} />
+      <OAuthButtons
+        onError={setOauthError}
+        onSuccess={() => navigate(returnTo)}
+      />
       {oauthError && (
         <p className="auth-error" role="alert">
           {oauthError}
@@ -95,7 +98,10 @@ export function SignUpPage() {
       <div className="auth-divider" aria-hidden="true">
         or
       </div>
-      <OAuthButtons onError={setOauthError} />
+      <OAuthButtons
+        onError={setOauthError}
+        onSuccess={() => navigate(returnTo)}
+      />
       {oauthError && (
         <p className="auth-error" role="alert">
           {oauthError}

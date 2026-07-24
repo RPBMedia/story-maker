@@ -120,10 +120,17 @@ Supabase when you want to actually test sign-up, sign-in, and export.
    implemented and will surface Supabase's own "provider not enabled" error
    until Apple is configured; nothing is faked.
 7. **Callback / redirect URLs** — local and production:
-   - Authentication → URL Configuration → **Redirect URLs**: add every origin
-     you'll run the app from, e.g. `http://localhost:5173` for local dev and
-     `https://your-deployed-domain.com` for production. The app never
-     hardcodes `localhost` — `authRedirectUrl()` in `src/config/env.ts`
+   - Authentication → URL Configuration → **Redirect URLs**: add a wildcard
+     entry for every origin you'll run the app from so all app paths (the
+     OAuth popup callback at `/auth/popup-callback` and the password-reset
+     page at `/auth/reset-password`) are allowed:
+     ```
+     http://localhost:5173/**
+     https://your-deployed-domain.com/**
+     ```
+     A bare origin like `http://localhost:5173` only matches the root path,
+     which would break the popup callback — use the `/**` wildcard. The app
+     never hardcodes `localhost` — `authRedirectUrl()` in `src/config/env.ts`
      always builds redirects from `window.location.origin`, so the same code
      works in every environment as long as the origin is allow-listed here.
    - **Password reset redirect**: handled automatically — `requestPasswordReset`
@@ -158,10 +165,20 @@ Supabase when you want to actually test sign-up, sign-in, and export.
   gate — a modal, not a page redirect — so the in-memory project (including
   selected `File` objects) survives the whole sign-in/sign-up flow. Closing
   the gate is always available and never destructive.
-- **OAuth is a real page redirect** (Supabase doesn't offer a first-class
-  popup mode), so it reloads the page. The gate warns about this honestly
-  before you click Google/Apple: locally selected files will need to be
-  re-selected afterwards. Email/password sign-in never has this problem.
+- **Google/Apple sign-in runs in a popup window**, not a full-page redirect.
+  The popup handles the provider round-trip and closes itself; the main
+  window never unloads, so **the entire project (uploaded files, sequence,
+  effects) is preserved across OAuth sign-in** — same as email/password. The
+  popup lands on `/auth/popup-callback`, which lets Supabase process the
+  tokens; the main window then observes the new session via a cross-window
+  storage event. If a browser blocks the popup, the user is asked to allow
+  popups and retry (no surprise navigation / state loss), with email/password
+  always available as a fallback.
+- **Avatars**: the display name and avatar come from the live session's OAuth
+  metadata (Google's `picture` / `full_name` claims), so they show instantly
+  without depending on the `profiles` row. Google avatar images are loaded
+  with `referrerPolicy="no-referrer"` (they 403 otherwise) and fall back to
+  the user's initial if the image ever fails.
 
 ### Export authorization and future monetization groundwork
 

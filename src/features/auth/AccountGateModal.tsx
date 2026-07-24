@@ -115,7 +115,7 @@ export function AccountGateModal({
         <div className="auth-divider" aria-hidden="true">
           or
         </div>
-        <OAuthButtons onError={setOauthError} redirectWarning />
+        <OAuthButtons onError={setOauthError} onSuccess={handleAuthenticated} />
         {oauthError && (
           <p className="auth-error" role="alert">
             {oauthError}

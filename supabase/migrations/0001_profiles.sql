@@ -33,7 +33,11 @@ begin
     new.email,
     coalesce(new.raw_user_meta_data ->> 'full_name',
              new.raw_user_meta_data ->> 'name'),
-    new.raw_user_meta_data ->> 'avatar_url'
+    -- Google's OIDC avatar arrives as `picture`; other providers use
+    -- `avatar_url`. Capture whichever is present. (The app also reads the
+    -- avatar from the live session metadata, so this is best-effort.)
+    coalesce(new.raw_user_meta_data ->> 'avatar_url',
+             new.raw_user_meta_data ->> 'picture')
   )
   on conflict (id) do nothing;
   return new;

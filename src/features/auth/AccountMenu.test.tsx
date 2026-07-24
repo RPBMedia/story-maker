@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { AccountMenu } from "./AccountMenu";
@@ -70,5 +70,48 @@ describe("header authentication control", () => {
     renderMenu();
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Account/ })).toBeNull();
+  });
+
+  it("renders the avatar with a no-referrer policy (Google avatars need it)", () => {
+    setMockAuthState({
+      status: "signed-in",
+      userId: "u1",
+      email: "rui@example.com",
+      profile: {
+        id: "u1",
+        email: "rui@example.com",
+        displayName: "Rui Baiao",
+        avatarUrl: "https://lh3.googleusercontent.com/a/abc123",
+        plan: "free",
+        exportCount: 0,
+      },
+    });
+    renderMenu();
+    const img = document.querySelector("img.account__avatar") as HTMLImageElement;
+    expect(img).toBeTruthy();
+    expect(img.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(img.src).toContain("googleusercontent.com");
+  });
+
+  it("falls back to the initial (never a broken-image icon) if the avatar fails to load", () => {
+    setMockAuthState({
+      status: "signed-in",
+      userId: "u1",
+      email: "rui@example.com",
+      profile: {
+        id: "u1",
+        email: "rui@example.com",
+        displayName: "Rui Baiao",
+        avatarUrl: "https://broken.example/x.png",
+        plan: "free",
+        exportCount: 0,
+      },
+    });
+    renderMenu();
+    const img = document.querySelector("img.account__avatar") as HTMLImageElement;
+    fireEvent.error(img);
+    // after the error, the img is gone and the initial letter is shown
+    expect(document.querySelector("img.account__avatar")).toBeNull();
+    expect(screen.getByText("R")).toBeTruthy();
   });
 });

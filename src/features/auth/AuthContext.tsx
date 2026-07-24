@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -18,6 +19,10 @@ import type { AuthState, UserProfile } from "../../types";
  * detail lives solely in config/env.ts's console diagnostic. */
 export const ACCOUNT_SERVICE_UNAVAILABLE =
   "Account services are temporarily unavailable. Please try again shortly.";
+
+/** signInWithOAuth sentinels the caller handles specially (not error copy). */
+export const OAUTH_POPUP_BLOCKED = "OAUTH_POPUP_BLOCKED";
+export const OAUTH_CANCELLED = "OAUTH_CANCELLED";
 
 export interface AuthApi {
   /** Status, user id, email, and (once loaded) profile row. */
@@ -41,11 +46,27 @@ function stateFromSession(session: Session | null): AuthState {
   if (!session?.user) {
     return { status: "signed-out", userId: null, email: null, profile: null };
   }
+  // Build an immediate profile from the session's own user_metadata. For
+  // OAuth (Google/Apple) this already carries the display name and avatar, so
+  // the header shows them instantly and correctly WITHOUT depending on the
+  // `profiles` table row (whose trigger may not have captured the provider's
+  // `picture` claim). The async profiles-table load below enriches this with
+  // plan / export_count.
+  const meta = (session.user.user_metadata ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | null =>
+    typeof v === "string" && v.trim() ? v : null;
   return {
     status: "signed-in",
     userId: session.user.id,
     email: session.user.email ?? null,
-    profile: null, // filled asynchronously
+    profile: {
+      id: session.user.id,
+      email: session.user.email ?? null,
+      displayName: str(meta.full_name) ?? str(meta.name),
+      avatarUrl: str(meta.avatar_url) ?? str(meta.picture),
+      plan: "free",
+      exportCount: 0,
+    },
   };
 }
 
@@ -84,10 +105,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Load the profile row after sign-in (best-effort; RLS scopes it to self).
+  // Enrich the (already session-derived) profile with the DB row's plan /
+  // export_count. Runs once per signed-in user; merges rather than
+  // overwrites, so the session's avatar/name survive even when the profiles
+  // row lacks them. Best-effort; RLS scopes the read to the user's own row.
+  const profileLoadedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!supabase || auth.status !== "signed-in" || !auth.userId) return;
-    if (auth.profile) return;
+    if (profileLoadedFor.current === auth.userId) return;
+    profileLoadedFor.current = auth.userId;
     let disposed = false;
     supabase
       .from("profiles")
@@ -96,22 +122,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle()
       .then(({ data }) => {
         if (disposed || !data) return;
-        const profile: UserProfile = {
-          id: data.id,
-          email: data.email,
-          displayName: data.display_name,
-          avatarUrl: data.avatar_url,
-          plan: data.plan ?? "free",
-          exportCount: data.export_count ?? 0,
-        };
-        setAuth((cur) =>
-          cur.userId === profile.id ? { ...cur, profile } : cur,
-        );
+        setAuth((cur) => {
+          if (cur.userId !== data.id) return cur;
+          const merged: UserProfile = {
+            id: data.id,
+            email: data.email ?? cur.profile?.email ?? null,
+            // prefer whatever is non-empty; session metadata usually wins for
+            // OAuth avatars, the DB row for a user's later customizations
+            displayName: cur.profile?.displayName ?? data.display_name ?? null,
+            avatarUrl: cur.profile?.avatarUrl ?? data.avatar_url ?? null,
+            plan: data.plan ?? "free",
+            exportCount: data.export_count ?? 0,
+          };
+          return { ...cur, profile: merged };
+        });
       });
     return () => {
       disposed = true;
     };
-  }, [auth.status, auth.userId, auth.profile]);
+  }, [auth.status, auth.userId]);
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
@@ -154,22 +183,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /**
+   * OAuth via a POPUP window rather than a full-page redirect. This keeps the
+   * main window — and therefore the entire in-memory project (uploaded File
+   * objects, sequence, effects, everything) — alive across sign-in. The popup
+   * lands on /auth/popup-callback, which lets Supabase process the tokens and
+   * then closes itself; the main window observes the new session (a
+   * cross-window storage event fires onAuthStateChange) and we resolve.
+   *
+   * Returns null on success, OAUTH_POPUP_BLOCKED / OAUTH_CANCELLED sentinels
+   * for the caller to handle, or a human error string otherwise.
+   */
   const signInWithOAuth = useCallback(
-    async (provider: "google" | "apple") => {
+    async (provider: "google" | "apple"): Promise<string | null> => {
       if (!supabase) return ACCOUNT_SERVICE_UNAVAILABLE;
+      const client = supabase; // stable non-null ref for the async closures
       analytics.track("oauth_started", { provider });
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: authRedirectUrl("/") },
-      });
-      if (error) {
-        analytics.track("oauth_failed", { provider });
-        return humanAuthError(error);
+
+      // The popup MUST be opened synchronously inside the click gesture, before
+      // any await — otherwise the browser blocks it as non-user-initiated.
+      const popup = window.open(
+        "about:blank",
+        "storymaker-oauth",
+        "width=500,height=680,menubar=no,toolbar=no,location=no,status=no",
+      );
+      if (!popup) {
+        analytics.track("oauth_failed", { provider, reason: "popup_blocked" });
+        return OAUTH_POPUP_BLOCKED;
       }
-      // Success here just means the redirect was initiated; the browser is
-      // about to navigate away, so "oauth_completed" fires from the
-      // onAuthStateChange handler once the session actually lands.
-      return null;
+
+      const { data, error } = await client.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: authRedirectUrl("/auth/popup-callback"),
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error || !data?.url) {
+        try {
+          popup.close();
+        } catch {
+          /* noop */
+        }
+        analytics.track("oauth_failed", { provider });
+        return error
+          ? humanAuthError(error)
+          : "Couldn't start sign-in. Please try again.";
+      }
+      popup.location.href = data.url;
+
+      // Wait for the popup to deliver a session or to be closed/cancelled.
+      return await new Promise<string | null>((resolve) => {
+        const startedAt = Date.now();
+        const timer = window.setInterval(async () => {
+          let closed = false;
+          try {
+            closed = popup.closed;
+          } catch {
+            /* COOP can hide this; the getSession check below still works */
+          }
+          const { data: sess } = await client.auth.getSession();
+          if (sess.session) {
+            window.clearInterval(timer);
+            try {
+              popup.close();
+            } catch {
+              /* noop */
+            }
+            resolve(null); // onAuthStateChange already updated app state
+            return;
+          }
+          if (closed) {
+            window.clearInterval(timer);
+            analytics.track("oauth_failed", { provider, reason: "cancelled" });
+            resolve(OAUTH_CANCELLED);
+            return;
+          }
+          if (Date.now() - startedAt > 3 * 60_000) {
+            window.clearInterval(timer);
+            try {
+              popup.close();
+            } catch {
+              /* noop */
+            }
+            resolve("Sign-in timed out. Please try again.");
+          }
+        }, 500);
+      });
     },
     [],
   );

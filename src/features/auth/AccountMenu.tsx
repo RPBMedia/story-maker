@@ -13,6 +13,7 @@ import { analytics } from "../../services/analytics";
 export function AccountMenu() {
   const { auth, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -72,8 +73,18 @@ export function AccountMenu() {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {auth.profile?.avatarUrl ? (
-          <img className="account__avatar" src={auth.profile.avatarUrl} alt="" />
+        {auth.profile?.avatarUrl && !avatarBroken ? (
+          <img
+            className="account__avatar"
+            src={auth.profile.avatarUrl}
+            alt=""
+            // Google avatar URLs (lh3.googleusercontent.com) 403 when a
+            // referrer header is sent from localhost/other origins.
+            referrerPolicy="no-referrer"
+            // If the image still fails for any reason, fall back to the
+            // initial instead of showing a broken-image icon.
+            onError={() => setAvatarBroken(true)}
+          />
         ) : (
           <span className="account__avatar account__avatar--initial" aria-hidden="true">
             {initial}

@@ -3,7 +3,7 @@
  * the two stay visually and behaviorally identical.
  */
 import { useState, type FormEvent } from "react";
-import { useAuth } from "./AuthContext";
+import { useAuth, OAUTH_CANCELLED, OAUTH_POPUP_BLOCKED } from "./AuthContext";
 import { config } from "../../config/env";
 
 /** Inline note shown near auth forms when Supabase isn't configured.
@@ -55,10 +55,11 @@ export function AccountUnavailableNotice({ message }: { message: string }) {
 
 export function OAuthButtons({
   onError,
-  redirectWarning,
+  onSuccess,
 }: {
   onError: (msg: string) => void;
-  redirectWarning?: boolean;
+  /** Called after a successful popup sign-in (the main window never left). */
+  onSuccess?: () => void;
 }) {
   const { signInWithOAuth } = useAuth();
   const [busy, setBusy] = useState<"google" | "apple" | null>(null);
@@ -66,20 +67,25 @@ export function OAuthButtons({
   async function go(provider: "google" | "apple") {
     setBusy(provider);
     const err = await signInWithOAuth(provider);
-    // On success the browser navigates away; reaching here means failure/cancel.
-    if (err) onError(err);
     setBusy(null);
+    if (err === OAUTH_CANCELLED) return; // user closed the popup; stay silent
+    if (err === OAUTH_POPUP_BLOCKED) {
+      onError(
+        "Your browser blocked the sign-in popup. Please allow popups for this site and try again — or use email and password below, which keeps your project in place.",
+      );
+      return;
+    }
+    if (err) {
+      onError(err);
+      return;
+    }
+    // Popup sign-in succeeded and the main window (and your whole project) is
+    // still here — hand back to the caller to close the gate / navigate.
+    onSuccess?.();
   }
 
   return (
     <div className="oauth-buttons">
-      {redirectWarning && (
-        <p className="auth-note" role="note">
-          Signing in with Google or Apple reloads the page — you may need to
-          select your local files again afterwards. Email sign-in keeps
-          everything in place.
-        </p>
-      )}
       <button
         type="button"
         className="btn btn--secondary btn--block"

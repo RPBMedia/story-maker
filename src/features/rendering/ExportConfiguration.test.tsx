@@ -1,6 +1,7 @@
-/** Configuration handling — deliberately uses the REAL AuthProvider (no
- * mock) against the true default test/dev environment, which has no .env
- * and is therefore "unconfigured". This is the exact scenario the original
+/** Configuration handling — uses the REAL AuthProvider (no auth mock) but
+ * FORCES the "unconfigured" state (no Supabase) via module mocks, so the test
+ * is deterministic whether or not the developer has a real .env on disk
+ * (vitest loads .env through Vite). This is the exact scenario the original
  * bug report described: a dead-end disabled button with a raw technical
  * warning. Verifies the app not only survives it but presents it well.
  */
@@ -13,6 +14,27 @@ import { ProjectProvider, useProject } from "../../state/ProjectContext";
 import { AuthProvider } from "../auth/AuthContext";
 import { ExportStage } from "./ExportStage";
 import type { AudioTrack, ImageMediaItem } from "../../types";
+
+// Force unconfigured: no Supabase client, config reports not-configured.
+vi.mock("../../services/supabase", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../services/supabase")>(
+      "../../services/supabase",
+    );
+  return { ...actual, supabase: null };
+});
+vi.mock("../../config/env", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../config/env")>("../../config/env");
+  return {
+    ...actual,
+    config: {
+      ...actual.config,
+      authConfigured: false,
+      missingEnvVars: ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"],
+    },
+  };
+});
 
 function track(): AudioTrack {
   return {
