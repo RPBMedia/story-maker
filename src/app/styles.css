@@ -70,9 +70,33 @@ body {
 }
 
 .topbar__brand {
+  margin: 0;
+}
+
+/* The brand is a heading wrapping a button so it stays a real <h1> while
+   being clickable (start a new project). */
+.topbar__brand-btn {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.topbar__brand-btn:hover {
+  opacity: 0.85;
+}
+
+.topbar__brand-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .topbar__logo {

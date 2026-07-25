@@ -68,4 +68,22 @@ describe("App shell", () => {
     await user.click(stepper.getByRole("button", { name: /Visual media/ }));
     expect(screen.getByText("No visual media yet.")).toBeTruthy();
   });
+
+  it("clicking the StoryMaker brand returns home to start a new project", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const stepper = within(
+      screen.getByRole("navigation", { name: "Project stages" }),
+    );
+    // move off the home (Soundtrack) stage
+    await user.click(stepper.getByRole("button", { name: /Review/ }));
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Review" }),
+    ).toBeTruthy();
+    // click the brand → back on Soundtrack (empty project → no confirm needed)
+    await user.click(screen.getByRole("button", { name: /StoryMaker/ }));
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Soundtrack" }),
+    ).toBeTruthy();
+  });
 });

@@ -7,6 +7,7 @@ import { ExportStage } from "../features/rendering/ExportStage";
 import { Notices } from "../components/Notices";
 import { formatDuration } from "../utils/format";
 import { AccountMenu } from "../features/auth/AccountMenu";
+import { renderingService } from "../services/rendering/RenderingService";
 
 export function App() {
   const { state, dispatch, soundtrackDuration, isValid } = useProject();
@@ -19,15 +20,38 @@ export function App() {
   };
   const stageIndex = STAGES.findIndex((s) => s.id === state.stage);
 
+  /** Clicking the StoryMaker brand returns home to start a fresh project. */
+  function startNewProject() {
+    const hasContent =
+      state.audioTracks.length > 0 || state.visualItems.length > 0;
+    if (
+      hasContent &&
+      !window.confirm(
+        "Start a new project? Your current soundtrack, media, and effects will be cleared.",
+      )
+    ) {
+      return;
+    }
+    renderingService.cancel(); // no-op unless a render is in progress
+    dispatch({ type: "reset-project" }); // resets state and returns to Soundtrack
+  }
+
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="topbar__brand">
-          <span className="topbar__logo" aria-hidden="true">
-            ▶
-          </span>
-          <h1>StoryMaker</h1>
-        </div>
+        <h1 className="topbar__brand">
+          <button
+            type="button"
+            className="topbar__brand-btn"
+            onClick={startNewProject}
+            title="Start a new project"
+          >
+            <span className="topbar__logo" aria-hidden="true">
+              ▶
+            </span>
+            StoryMaker
+          </button>
+        </h1>
         <div className="topbar__right">
         <div className="topbar__status">
           {state.audioTracks.length > 0 && (
