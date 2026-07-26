@@ -28,6 +28,8 @@ function img(): ImageMediaItem {
   return {
     id: `img-${id}`,
     kind: "image",
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
     file: new File([], `i${id}.png`),
     name: `i${id}.png`,
     size: 1,
@@ -41,6 +43,8 @@ function vid(duration: number): VideoMediaItem {
   return {
     id: `vid-${id}`,
     kind: "video",
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
     file: new File([], `v${id}.mp4`),
     name: `v${id}.mp4`,
     size: 1,

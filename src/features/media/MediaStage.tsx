@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useProject } from "../../state/ProjectContext";
 import { UploadZone } from "../../components/UploadZone";
 import { SortableCard } from "../../components/SortableCard";
+import { MediaToolbar } from "./MediaToolbar";
 import { useDragReorder } from "../../hooks/useDragReorder";
 import { probeAV, probeImage } from "../../services/metadata";
+import { resolveMediaDate } from "../../services/mediaDate";
 import { classifyFile, isDuplicate } from "../../utils/validation";
-import { formatBytes, formatSeconds } from "../../utils/format";
+import { formatBytes, formatMediaDate, formatSeconds } from "../../utils/format";
 import {
   TRANSITION_LIMITS,
   ZOOM_LIMITS,
@@ -43,6 +45,7 @@ export function MediaStage() {
       try {
         if (check.category === "image") {
           const meta = await probeImage(file);
+          const date = await resolveMediaDate(file, "image");
           accepted.push({
             id: crypto.randomUUID(),
             kind: "image",
@@ -52,9 +55,12 @@ export function MediaStage() {
             previewUrl: URL.createObjectURL(file),
             width: meta.width ?? 0,
             height: meta.height ?? 0,
+            createdAt: date.timestamp,
+            dateSource: date.source,
           });
         } else {
           const meta = await probeAV(file, "video");
+          const date = await resolveMediaDate(file, "video");
           accepted.push({
             id: crypto.randomUUID(),
             kind: "video",
@@ -65,6 +71,8 @@ export function MediaStage() {
             duration: meta.duration ?? 0,
             width: meta.width ?? 0,
             height: meta.height ?? 0,
+            createdAt: date.timestamp,
+            dateSource: date.source,
           });
         }
       } catch (e) {
@@ -109,6 +117,8 @@ export function MediaStage() {
           Image durations show as “–” until you add a soundtrack in step 1.
         </p>
       )}
+
+      {state.visualItems.length > 0 && <MediaToolbar />}
 
       {state.visualItems.length === 0 && !busy ? (
         <div className="empty-state">
@@ -165,6 +175,24 @@ export function MediaStage() {
                       ? `source ${formatSeconds(item.duration)} · `
                       : ""}
                     {formatBytes(item.size)}
+                  </span>
+                  <span className="track__meta media-item__date">
+                    {(() => {
+                      const d = formatMediaDate(item.createdAt, item.dateSource);
+                      return (
+                        <>
+                          <span className="media-item__date-label">
+                            {d.label}
+                          </span>{" "}
+                          <span
+                            className="media-item__date-value"
+                            title={`Date source: ${d.sourceHint}`}
+                          >
+                            {d.value}
+                          </span>
+                        </>
+                      );
+                    })()}
                   </span>
                   <span className="track__meta">
                     In final video:{" "}

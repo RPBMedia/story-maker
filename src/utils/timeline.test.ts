@@ -16,6 +16,8 @@ function img(): ImageMediaItem {
   return {
     id: `img-${id}`,
     kind: "image",
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
     file: new File([], `img-${id}.png`),
     name: `img-${id}.png`,
     size: 1,
@@ -29,6 +31,8 @@ function vid(duration: number): VideoMediaItem {
   return {
     id: `vid-${id}`,
     kind: "video",
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
     file: new File([], `vid-${id}.mp4`),
     name: `vid-${id}.mp4`,
     size: 1,

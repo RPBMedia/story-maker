@@ -29,6 +29,8 @@ function image(name: string): ImageMediaItem {
   return {
     id: `i-${Math.random()}`,
     kind: "image",
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
     file: new File(["x"], name),
     name,
     size: 1000,

@@ -11,6 +11,17 @@ export interface AudioTrack {
   previewUrl: string;
 }
 
+/**
+ * Where a media item's resolved creation date came from, in descending order
+ * of trust. Never claim `file-last-modified` is the capture date in the UI —
+ * the label copy in the editor maps each source to honest wording.
+ */
+export type MediaDateSource =
+  | "embedded-original"
+  | "embedded-created"
+  | "file-last-modified"
+  | "upload-time";
+
 interface VisualMediaBase {
   id: string;
   file: File;
@@ -18,6 +29,12 @@ interface VisualMediaBase {
   size: number;
   /** Object URL for thumbnail / preview. */
   previewUrl: string;
+  /** Resolved creation timestamp (ms since epoch). Always populated at upload
+   * — never rejects media when metadata is missing (falls back to upload
+   * time). Sorting reads this directly; it is not re-parsed after upload. */
+  createdAt: number;
+  /** Which metadata source produced {@link createdAt}. */
+  dateSource: MediaDateSource;
 }
 
 export interface ImageMediaItem extends VisualMediaBase {
@@ -35,6 +52,24 @@ export interface VideoMediaItem extends VisualMediaBase {
 }
 
 export type VisualMediaItem = ImageMediaItem | VideoMediaItem;
+
+/**
+ * How the current visual sequence was ordered. `manual` means the user placed
+ * items by hand (drag or move buttons) — automatic sorting no longer applies.
+ * The automatic modes are recomputed only when explicitly requested; the
+ * resulting order is then frozen in project state and used verbatim by the
+ * renderer (rendering never re-sorts or re-shuffles).
+ */
+export type OrderingMode =
+  | "manual"
+  | "date-asc"
+  | "date-desc"
+  | "name-asc"
+  | "name-desc"
+  | "shuffled";
+
+/** The subset of {@link OrderingMode} selectable from the Sort dropdown. */
+export type SortOrderingMode = Exclude<OrderingMode, "shuffled">;
 
 export interface MediaMetadata {
   duration?: number;

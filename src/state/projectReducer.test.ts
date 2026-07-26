@@ -38,6 +38,8 @@ function image(): ImageMediaItem {
     previewUrl: `blob:i${n}`,
     width: 10,
     height: 10,
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
   };
 }
 
@@ -183,5 +185,108 @@ describe("visual effect settings", () => {
     let s = projectReducer(initialProjectState, { type: "confirm-export" });
     s = projectReducer(s, { type: "add-visual", items: [image()] });
     expect(s.exportConfirmed).toBe(false);
+  });
+});
+
+describe("ordering", () => {
+  function withItems(count: number): ProjectState {
+    return projectReducer(initialProjectState, {
+      type: "add-visual",
+      items: Array.from({ length: count }, () => image()),
+    });
+  }
+
+  it("starts in manual mode with nothing to undo", () => {
+    expect(initialProjectState.orderingMode).toBe("manual");
+    expect(initialProjectState.orderSnapshot).toBeNull();
+  });
+
+  it("set-ordering stores the new order, mode, and an undo snapshot", () => {
+    const s = withItems(3);
+    const before = s.visualItems.map((i) => i.id);
+    const reordered = [s.visualItems[2], s.visualItems[0], s.visualItems[1]];
+    const s2 = projectReducer(s, {
+      type: "set-ordering",
+      mode: "shuffled",
+      items: reordered,
+    });
+    expect(s2.orderingMode).toBe("shuffled");
+    expect(s2.visualItems.map((i) => i.id)).toEqual([
+      before[2],
+      before[0],
+      before[1],
+    ]);
+    expect(s2.orderSnapshot).not.toBeNull();
+    expect(s2.orderSnapshot?.items.map((i) => i.id)).toEqual(before);
+    expect(s2.orderSnapshot?.mode).toBe("manual");
+    expect(s2.exportConfirmed).toBe(false);
+  });
+
+  it("undo restores the exact previous sequence and mode (one level)", () => {
+    const s = withItems(3);
+    const before = s.visualItems.map((i) => i.id);
+    const s2 = projectReducer(s, {
+      type: "set-ordering",
+      mode: "name-asc",
+      items: [s.visualItems[1], s.visualItems[2], s.visualItems[0]],
+    });
+    const s3 = projectReducer(s2, { type: "undo-ordering" });
+    expect(s3.visualItems.map((i) => i.id)).toEqual(before);
+    expect(s3.orderingMode).toBe("manual");
+    // only one level: a second undo is a no-op
+    expect(s3.orderSnapshot).toBeNull();
+    expect(projectReducer(s3, { type: "undo-ordering" })).toBe(s3);
+  });
+
+  it("a manual drag switches to manual mode and clears the undo point", () => {
+    const s = withItems(3);
+    const sorted = projectReducer(s, {
+      type: "set-ordering",
+      mode: "date-asc",
+      items: s.visualItems.slice().reverse(),
+    });
+    expect(sorted.orderSnapshot).not.toBeNull();
+    const dragged = projectReducer(sorted, {
+      type: "reorder-visual",
+      from: 0,
+      to: 2,
+    });
+    expect(dragged.orderingMode).toBe("manual");
+    expect(dragged.orderSnapshot).toBeNull();
+  });
+
+  it("uploading new media appends and resets ordering to manual", () => {
+    const s = withItems(2);
+    const sorted = projectReducer(s, {
+      type: "set-ordering",
+      mode: "name-desc",
+      items: s.visualItems.slice().reverse(),
+    });
+    const withMore = projectReducer(sorted, {
+      type: "add-visual",
+      items: [image()],
+    });
+    expect(withMore.visualItems).toHaveLength(3);
+    expect(withMore.orderingMode).toBe("manual");
+    expect(withMore.orderSnapshot).toBeNull();
+    // existing items kept their (sorted) relative order; new one appended last
+    expect(withMore.visualItems.slice(0, 2).map((i) => i.id)).toEqual(
+      sorted.visualItems.map((i) => i.id),
+    );
+  });
+
+  it("removing an item clears a pending undo but keeps the mode", () => {
+    const s = withItems(3);
+    const sorted = projectReducer(s, {
+      type: "set-ordering",
+      mode: "date-desc",
+      items: s.visualItems.slice().reverse(),
+    });
+    const removed = projectReducer(sorted, {
+      type: "remove-visual",
+      id: sorted.visualItems[0].id,
+    });
+    expect(removed.orderSnapshot).toBeNull();
+    expect(removed.orderingMode).toBe("date-desc");
   });
 });
