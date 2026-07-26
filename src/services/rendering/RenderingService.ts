@@ -31,6 +31,7 @@ import type {
   RenderResult,
   RenderSettings,
   RenderStage,
+  TimelineSegment,
 } from "../../types";
 import {
   buildXfadeGraph,
@@ -38,6 +39,7 @@ import {
   scalePadChain,
   zoomChain,
 } from "./filters";
+import { xfadeOffsets } from "../../utils/timeline";
 
 export class RenderCancelledError extends Error {
   constructor() {
@@ -198,9 +200,14 @@ export class RenderingService {
       if (seg.item.kind === "image") {
         const stage = zoom ? w.zoom : w.images;
         const vf = zoom ? `${scalePad},${zoom}` : scalePad;
+        devLogSegment(i, seg, vf);
         await this.exec(
           [
+            // -framerate makes the looped still produce exactly
+            // duration*fps frames, which zoompan (d=1) maps 1:1 so the
+            // segment duration stays exact and the zoom spans the whole clip.
             "-loop", "1",
+            "-framerate", String(settings.fps),
             "-t", seg.duration.toFixed(3),
             "-i", visualNames[i],
             "-vf", vf,
@@ -225,6 +232,7 @@ export class RenderingService {
             ? `${scalePad},tpad=stop_mode=clone:stop_duration=${freeze.toFixed(3)}`
             : scalePad;
         if (zoom) vf = `${vf},${zoom}`;
+        devLogSegment(i, seg, vf);
         args.push("-vf", vf, "-an");
         args.push("-t", seg.duration.toFixed(3));
         args.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", out);
@@ -243,6 +251,7 @@ export class RenderingService {
       // and re-encode the combined timeline (slower, unavoidable).
       report(w.sequence, 0);
       const graph = buildXfadeGraph(timeline);
+      devLogGraph(timeline, graph.filter);
       const inputs = segNames.flatMap((n) => ["-i", n]);
       try {
         await this.exec(
@@ -427,6 +436,41 @@ export class RenderingService {
 function ext(name: string): string {
   const i = name.lastIndexOf(".");
   return i >= 0 ? name.slice(i).toLowerCase() : "";
+}
+
+// ---- dev-only render diagnostics --------------------------------------------
+// Visible only in development (import.meta.env.DEV); never surfaced to users.
+// Renders the effective zoom/transition, prepared segment durations, the
+// generated per-segment filter, xfade offsets, and the final filter graph.
+
+const DEV =
+  typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+
+function devLogSegment(index: number, seg: TimelineSegment, vf: string): void {
+  if (!DEV) return;
+  console.debug(
+    `[render] seg ${index} ${seg.item.kind} "${seg.item.name}" ` +
+      `dur=${seg.duration.toFixed(3)}s zoom=${seg.zoom.type}` +
+      (seg.zoom.type !== "none" ? `@${seg.zoom.amount}` : "") +
+      `\n         filter: ${vf}`,
+  );
+}
+
+function devLogGraph(timeline: EffectiveTimeline, filter: string): void {
+  if (!DEV) return;
+  const boundaries = timeline.boundaries
+    .map(
+      (b) =>
+        `after#${b.afterIndex}:${b.type}${b.overlap > 0 ? `(${b.overlap.toFixed(3)}s)` : ""}`,
+    )
+    .join(" ");
+  console.debug(
+    `[render] transitions: ${boundaries || "none"}\n` +
+      `[render] xfade offsets: ${xfadeOffsets(timeline)
+        .map((o) => o.toFixed(3))
+        .join(", ")}\n` +
+      `[render] final graph: ${filter}`,
+  );
 }
 
 function clamp(n: number): number {

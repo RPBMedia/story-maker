@@ -10,6 +10,7 @@ import {
   DEFAULT_RENDER_SETTINGS,
   DEFAULT_TRANSITION,
   DEFAULT_ZOOM,
+  ZOOM_LIMITS,
   type ImageMediaItem,
 } from "../../types";
 
@@ -35,21 +36,45 @@ describe("zoomChain", () => {
     expect(zoomChain({ type: "none", amount: 1.04 }, 5, S)).toBeNull();
   });
 
-  it("builds a zoom-in crop expression ending at the target scale", () => {
+  it("returns null for non-positive duration", () => {
+    expect(zoomChain({ type: "zoom-in", amount: 1.04 }, 0, S)).toBeNull();
+  });
+
+  it("uses zoompan (per-frame animated) not a static crop", () => {
     const f = zoomChain({ type: "zoom-in", amount: 1.06 }, 4, S)!;
-    expect(f).toContain("crop=");
-    expect(f).toContain("(1+(1.0600-1)*min(t/4.000\\,1))");
-    expect(f).toContain(`scale=${S.width}:${S.height}`);
+    // The old crop-based approach never animated (crop size is init-only);
+    // zoompan re-evaluates per output frame. Guard against regressing to crop.
+    expect(f).toContain("zoompan=");
+    expect(f).not.toContain("crop=");
   });
 
-  it("builds a zoom-out expression starting enlarged and ending framed", () => {
-    const f = zoomChain({ type: "zoom-out", amount: 1.1 }, 2.5, S)!;
-    expect(f).toContain("(1.1000-(1.1000-1)*min(t/2.500\\,1))");
+  it("animates zoom-in via the output-frame index (on), clamped to the target", () => {
+    // 4s * 30fps = 120 frames of progress
+    const f = zoomChain({ type: "zoom-in", amount: 1.06 }, 4, S)!;
+    expect(f).toContain("min(1+(1.0600-1)*on/120\\,1.0600)");
+    expect(f).toContain("d=1"); // 1 output frame per input frame → exact duration
+    expect(f).toContain(`s=${S.width}x${S.height}`);
+    expect(f).toContain(`fps=${S.fps}`);
   });
 
-  it("keeps output dimensions fixed and valid", () => {
+  it("animates zoom-out from the enlarged scale down to framed", () => {
+    const f = zoomChain({ type: "zoom-out", amount: 1.1 }, 2, S)!;
+    // 2s * 30fps = 60 frames
+    expect(f).toContain("max(1.1000-(1.1000-1)*on/60\\,1)");
+  });
+
+  it("keeps output geometry fixed (encoder-compatible) and SAR normalized", () => {
     const f = zoomChain({ type: "zoom-in", amount: 1.04 }, 3, S)!;
-    expect(f.endsWith(`scale=1280:720,setsar=1`)).toBe(true);
+    expect(f).toContain("s=1280x720");
+    expect(f).toContain("setsar=1");
+    expect(f).toContain("format=yuv420p");
+  });
+
+  it("clamps invalid zoom amounts into the safe range", () => {
+    const tooBig = zoomChain({ type: "zoom-in", amount: 9 }, 4, S)!;
+    expect(tooBig).toContain(`(${ZOOM_LIMITS.max.toFixed(4)}-1)`);
+    const tooSmall = zoomChain({ type: "zoom-in", amount: 1.0 }, 4, S)!;
+    expect(tooSmall).toContain(`(${ZOOM_LIMITS.min.toFixed(4)}-1)`);
   });
 });
 

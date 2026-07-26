@@ -4,6 +4,7 @@
  * Closing is always possible and obvious — no dark patterns.
  */
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { EmailPasswordForm, OAuthButtons, AuthUnconfiguredNote } from "./AuthForms";
 import { analytics } from "../../services/analytics";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
@@ -86,9 +87,11 @@ export function AccountGateModal({
         >
           ✕
         </button>
-        <h2 id="gate-title">Create a free account to render and download your video.</h2>
+        <h2 id="gate-title">Sign in to export your video</h2>
         <p id="gate-desc" className="stage-sub">
-          Your soundtrack, visual sequence, and effects will remain in place.
+          Create a free account or sign in to render and download this project.
+          Your soundtrack, media, transitions, and zoom settings will remain in
+          place.
         </p>
         <AuthUnconfiguredNote />
         <div className="gate-tabs" role="tablist">
@@ -112,6 +115,16 @@ export function AccountGateModal({
           </button>
         </div>
         <EmailPasswordForm mode={tab} onSuccess={handleAuthenticated} />
+        {tab === "sign-in" && (
+          <p className="auth-links">
+            {/* Project state survives this route change: ProjectProvider is
+                mounted above the router, so leaving for the reset flow and
+                returning keeps the soundtrack/media/effects intact. */}
+            <Link to="/auth/forgot-password" onClick={onClose}>
+              Forgot your password?
+            </Link>
+          </p>
+        )}
         <div className="auth-divider" aria-hidden="true">
           or
         </div>
@@ -121,6 +134,13 @@ export function AccountGateModal({
             {oauthError}
           </p>
         )}
+        <button
+          type="button"
+          className="btn btn--ghost btn--block gate-dismiss"
+          onClick={onClose}
+        >
+          Not now
+        </button>
       </div>
     </div>
   );

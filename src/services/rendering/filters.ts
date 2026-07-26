@@ -8,6 +8,7 @@ import type {
   RenderSettings,
   ZoomEffectSettings,
 } from "../../types";
+import { ZOOM_LIMITS } from "../../types";
 import { xfadeOffsets } from "../../utils/timeline";
 
 /** Normalization chain shared by every segment (identical params so the
@@ -21,14 +22,30 @@ export function scalePadChain(s: RenderSettings): string {
 }
 
 /**
- * Subtle Ken Burns zoom as a time-based crop on the composed frame.
+ * Subtle Ken Burns zoom, animated with FFmpeg's `zoompan` filter.
  *
- * zoom-in : z(t) = 1 + (A−1)·t/D   (starts framed, ends magnified by A)
- * zoom-out: z(t) = A − (A−1)·t/D   (starts magnified by A, ends framed)
+ * Why zoompan and not a time-varying `crop`: `crop`'s width/height are
+ * evaluated ONCE at filter init (there is no per-frame `eval` for the crop
+ * SIZE), so a `crop=w=iw/z(t)...` expression produces a constant crop — the
+ * zoom never animates. That was the original bug: zoom was baked into every
+ * segment but never actually moved (most visible with cross-fade on, since
+ * that path re-encodes and users expect motion). `zoompan` re-evaluates its
+ * expressions per output frame, so it genuinely animates.
  *
- * Cropping the already letterboxed frame guarantees no blank borders appear;
- * the trade-off (modest edge cropping while zoomed) is communicated in the
- * UI. Returns null when no zoom applies.
+ * Contract that keeps segment duration EXACT (the classic zoompan trap is
+ * `d` multiplying frames and exploding duration):
+ *   - `d=1`  → exactly one output frame per input frame. For a
+ *     framerate-driven image input (`-loop 1 -framerate F -t D`) that is
+ *     D·F frames = D seconds; for a video clip it is 1:1, preserving motion.
+ *   - progress is driven by `on` (cumulative output-frame index), not `d`.
+ *   - `s`/`fps` pin the output geometry and rate.
+ *
+ * zoom-in : z(on) = 1 + (A−1)·on/N , clamped to A   (framed → magnified)
+ * zoom-out: z(on) = A − (A−1)·on/N , clamped to 1   (magnified → framed)
+ *
+ * Applied AFTER the letterbox/fit chain, so no blank borders are exposed
+ * (the trade-off is modest edge cropping while magnified). Returns null when
+ * no zoom applies.
  */
 export function zoomChain(
   zoom: ZoomEffectSettings,
@@ -36,15 +53,21 @@ export function zoomChain(
   s: RenderSettings,
 ): string | null {
   if (zoom.type === "none" || durationSeconds <= 0) return null;
-  const A = zoom.amount.toFixed(4);
-  const D = Math.max(durationSeconds, 0.001).toFixed(3);
+  const amount = Math.min(
+    ZOOM_LIMITS.max,
+    Math.max(ZOOM_LIMITS.min, zoom.amount),
+  );
+  const A = amount.toFixed(4);
+  // Total output frames across the segment; drives the animation progress.
+  const n = Math.max(1, Math.round(durationSeconds * s.fps));
+  // Comma inside function args must be escaped for the filtergraph parser.
   const z =
     zoom.type === "zoom-in"
-      ? `(1+(${A}-1)*min(t/${D}\\,1))`
-      : `(${A}-(${A}-1)*min(t/${D}\\,1))`;
+      ? `min(1+(${A}-1)*on/${n}\\,${A})`
+      : `max(${A}-(${A}-1)*on/${n}\\,1)`;
   return (
-    `crop=w='iw/${z}':h='ih/${z}':x='(iw-ow)/2':y='(ih-oh)/2',` +
-    `scale=${s.width}:${s.height},setsar=1`
+    `zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+    `d=1:s=${s.width}x${s.height}:fps=${s.fps},setsar=1,format=yuv420p`
   );
 }
 

@@ -37,14 +37,49 @@ let mockAuth: AuthState = defaultAuthState("signed-out");
 let mockAuthError: string | null = null;
 const listeners = new Set<() => void>();
 
+/** STABLE spies shared across every render, so a test can assert e.g.
+ * "signInWithOAuth was never called just from opening the gate". Recreated
+ * on resetMockAuth() so call counts don't leak between tests. */
+export let authSpies = makeAuthSpies();
+
+function makeAuthSpies() {
+  return {
+    signInWithPassword: vi.fn(async (): Promise<string | null> => {
+      if (mockAuthError) {
+        const err = mockAuthError;
+        mockAuthError = null;
+        return err;
+      }
+      setMockAuthState(defaultAuthState("signed-in"));
+      return null;
+    }),
+    signUpWithPassword: vi.fn(async (): Promise<string | null> => {
+      if (mockAuthError) {
+        const err = mockAuthError;
+        mockAuthError = null;
+        return err;
+      }
+      setMockAuthState(defaultAuthState("signed-in"));
+      return null;
+    }),
+    signInWithOAuth: vi.fn(async (): Promise<string | null> => null),
+    requestPasswordReset: vi.fn(async (): Promise<string | null> => null),
+    updatePassword: vi.fn(async (): Promise<string | null> => null),
+    signOut: vi.fn(async () => {
+      setMockAuthState(defaultAuthState("signed-out"));
+    }),
+  };
+}
+
 function notify() {
   listeners.forEach((l) => l());
 }
 
-/** Reset the shared mock auth store — call from beforeEach. */
+/** Reset the shared mock auth store AND the spy call history. */
 export function resetMockAuth(status: AuthState["status"] = "signed-out") {
   mockAuth = defaultAuthState(status);
   mockAuthError = null;
+  authSpies = makeAuthSpies();
   notify();
 }
 
@@ -60,9 +95,10 @@ export function setMockAuthState(next: AuthState) {
 }
 
 /** Shared reactive hook: every component calling useAuth() in a test render
- * tree sees the SAME store, so signing in from one component (e.g. the
- * account gate's form) is visible to another (e.g. ExportStage) — exactly
- * like the real Supabase-backed context, without needing a live backend. */
+ * tree sees the SAME store and the SAME stable spies, so signing in from one
+ * component (e.g. the account gate's form) is visible to another (e.g.
+ * ExportStage) and call counts are assertable — exactly like the real
+ * Supabase-backed context, without needing a live backend. */
 export function useMockAuth(): AuthApi {
   const auth = useSyncExternalStore(
     (cb) => {
@@ -76,30 +112,7 @@ export function useMockAuth(): AuthApi {
     auth,
     loading: auth.status === "loading",
     session: null,
-    signInWithPassword: vi.fn(async () => {
-      if (mockAuthError) {
-        const err = mockAuthError;
-        mockAuthError = null;
-        return err;
-      }
-      setMockAuthState(defaultAuthState("signed-in"));
-      return null;
-    }),
-    signUpWithPassword: vi.fn(async () => {
-      if (mockAuthError) {
-        const err = mockAuthError;
-        mockAuthError = null;
-        return err;
-      }
-      setMockAuthState(defaultAuthState("signed-in"));
-      return null;
-    }),
-    signInWithOAuth: vi.fn(async () => null),
-    requestPasswordReset: vi.fn(async () => null),
-    updatePassword: vi.fn(async () => null),
-    signOut: vi.fn(async () => {
-      setMockAuthState(defaultAuthState("signed-out"));
-    }),
+    ...authSpies,
   };
 }
 

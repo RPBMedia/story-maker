@@ -1014,6 +1014,10 @@ body {
   color: var(--text);
 }
 
+.gate-dismiss {
+  margin-top: 4px;
+}
+
 /* ---- account menu ---- */
 .topbar__right {
   display: flex;

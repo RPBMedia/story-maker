@@ -9,12 +9,14 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import {
+  authSpies,
   renderWithProviders,
   resetMockAuth,
   setMockAuthError,
   setMockAuthState,
 } from "../../test/helpers";
 import { ExportStage } from "./ExportStage";
+import { renderingService } from "../../services/rendering/RenderingService";
 import { useProject } from "../../state/ProjectContext";
 import type { AudioTrack, ImageMediaItem } from "../../types";
 
@@ -299,5 +301,102 @@ describe("review screen communication", () => {
         screen.getByText(/usually takes around 5–15 minutes/i),
       ).toBeTruthy(),
     );
+  });
+});
+
+describe("no automatic authentication; explicit action only", () => {
+  it("opening the gate calls NO authentication function (no auto/anonymous/mock sign-in)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SeededExport />);
+    await user.click(
+      await screen.findByRole("button", { name: "Generate Video" }),
+    );
+    await screen.findByRole("dialog");
+    // The mere act of pressing Generate Video must not authenticate anyone.
+    expect(authSpies.signInWithPassword).not.toHaveBeenCalled();
+    expect(authSpies.signUpWithPassword).not.toHaveBeenCalled();
+    expect(authSpies.signInWithOAuth).not.toHaveBeenCalled();
+  });
+
+  it("rendering does not begin while signed out", async () => {
+    const renderSpy = vi
+      .spyOn(renderingService, "render")
+      .mockResolvedValue({
+        url: "blob:out",
+        blob: new Blob(),
+        size: 10_000,
+        duration: 10,
+      });
+    const user = userEvent.setup();
+    renderWithProviders(<SeededExport />);
+    await user.click(
+      await screen.findByRole("button", { name: "Generate Video" }),
+    );
+    await screen.findByRole("dialog");
+    expect(renderSpy).not.toHaveBeenCalled();
+    renderSpy.mockRestore();
+  });
+
+  it("Google/Apple auth run ONLY when the user clicks them", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SeededExport />);
+    await user.click(
+      await screen.findByRole("button", { name: "Generate Video" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(authSpies.signInWithOAuth).not.toHaveBeenCalled();
+    await user.click(
+      within(dialog).getByRole("button", { name: /Continue with Google/ }),
+    );
+    expect(authSpies.signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(authSpies.signInWithOAuth).toHaveBeenCalledWith("google");
+  });
+
+  it("successful sign-in does NOT auto-start rendering; one explicit click is still required", async () => {
+    const renderSpy = vi
+      .spyOn(renderingService, "render")
+      .mockResolvedValue({
+        url: "blob:out",
+        blob: new Blob(),
+        size: 10_000,
+        duration: 10,
+      });
+    const user = userEvent.setup();
+    renderWithProviders(<SeededExport />);
+    await user.click(
+      await screen.findByRole("button", { name: "Generate Video" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Email"), "rui@example.com");
+    await user.type(within(dialog).getByLabelText("Password"), "hunter2hunter");
+    await user.type(
+      within(dialog).getByLabelText("Confirm password"),
+      "hunter2hunter",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Create account" }));
+
+    // Gate closes, Start Rendering appears — but rendering has NOT begun.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const startBtn = await screen.findByRole("button", { name: "Start Rendering" });
+    expect(renderSpy).not.toHaveBeenCalled();
+
+    // Exactly one explicit click starts it.
+    await user.click(startBtn);
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    renderSpy.mockRestore();
+  });
+
+  it("the 'Not now' action dismisses the gate and preserves the project", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SeededExport />);
+    const before = outputDuration();
+    await user.click(
+      await screen.findByRole("button", { name: "Generate Video" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Not now" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(outputDuration()).toBe(before);
+    expect(authSpies.signInWithPassword).not.toHaveBeenCalled();
   });
 });
