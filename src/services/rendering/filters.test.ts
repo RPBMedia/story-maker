@@ -50,6 +50,27 @@ describe("zoomChain", () => {
     expect(f).not.toContain("crop=");
   });
 
+  it("supersamples before zoompan so subtle zoom stays smooth (no 1px judder)", () => {
+    // zoompan rounds x/y to whole INPUT pixels; running it on a larger canvas
+    // (then downscaling via s=) turns the 1px step into a sub-pixel one.
+    const f = zoomChain({ type: "zoom-in", amount: 1.04 }, 5, S)!;
+    // 1280x720 * factor 3 = 3840x2160 working canvas, applied BEFORE zoompan.
+    expect(f).toContain("scale=3840:2160");
+    expect(f.indexOf("scale=")).toBeLessThan(f.indexOf("zoompan="));
+    // still downscales back to the real output size
+    expect(f).toContain("s=1280x720");
+  });
+
+  it("caps the supersample canvas so high-res output does not blow up memory", () => {
+    // At 4K output the native jitter is already sub-visible, so no upscale is
+    // added (factor collapses to 1) — the working edge never exceeds the cap.
+    const uhd = { ...S, width: 3840, height: 2160 };
+    const f = zoomChain({ type: "zoom-in", amount: 1.04 }, 5, uhd)!;
+    expect(f).not.toContain("scale=");
+    expect(f.startsWith("zoompan=")).toBe(true);
+    expect(f).toContain("s=3840x2160");
+  });
+
   it("animates zoom-in via the output-frame index (on), clamped to the target", () => {
     // 4s * 30fps = 120 frames of progress
     const f = zoomChain({ type: "zoom-in", amount: 1.06 }, 4, S)!;

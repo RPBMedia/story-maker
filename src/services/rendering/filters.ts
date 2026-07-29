@@ -43,10 +43,25 @@ export function scalePadChain(s: RenderSettings): string {
  * zoom-in : z(on) = 1 + (A−1)·on/N , clamped to A   (framed → magnified)
  * zoom-out: z(on) = A − (A−1)·on/N , clamped to 1   (magnified → framed)
  *
+ * Smoothness (why the supersample scale up front): `zoompan` rounds its
+ * per-frame crop origin `x`/`y` to WHOLE INPUT PIXELS. Our zoom is subtle, so
+ * the ideal centre moves only a fraction of a pixel per frame (e.g. ~0.16 px
+ * at amount 1.04 over 5 s); at output resolution the integer rounding makes
+ * the centre sit still for several frames then jump a full pixel — the
+ * "trembling"/judder users see instead of smooth motion. Running zoompan on a
+ * ~SUPERSAMPLE×-larger canvas (then letting its own `s=` downscale to target)
+ * turns that 1-px step into a sub-pixel step at output, so the motion reads as
+ * smooth. The working canvas is capped (SS_MAX_EDGE) to bound wasm memory.
+ *
  * Applied AFTER the letterbox/fit chain, so no blank borders are exposed
  * (the trade-off is modest edge cropping while magnified). Returns null when
  * no zoom applies.
  */
+/** Largest working edge (px) allowed for the zoompan supersample canvas. */
+const SS_MAX_EDGE = 3840;
+/** Target supersample factor before the memory cap is applied. */
+const SS_FACTOR = 3;
+
 export function zoomChain(
   zoom: ZoomEffectSettings,
   durationSeconds: number,
@@ -65,8 +80,18 @@ export function zoomChain(
     zoom.type === "zoom-in"
       ? `min(1+(${A}-1)*on/${n}\\,${A})`
       : `max(${A}-(${A}-1)*on/${n}\\,1)`;
+  // Supersample factor: SS_FACTOR, reduced so the longer working edge never
+  // exceeds SS_MAX_EDGE. High-resolution outputs already have sub-visible
+  // jitter, so they naturally fall back toward factor 1 (no upscale).
+  const factor = Math.max(
+    1,
+    Math.min(SS_FACTOR, Math.floor(SS_MAX_EDGE / Math.max(s.width, s.height))),
+  );
+  // Keep dimensions even (yuv420p) — s.width/s.height are already even.
+  const superSample =
+    factor > 1 ? `scale=${s.width * factor}:${s.height * factor}:flags=bicubic,` : "";
   return (
-    `zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+    `${superSample}zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
     `d=1:s=${s.width}x${s.height}:fps=${s.fps},setsar=1,format=yuv420p`
   );
 }
