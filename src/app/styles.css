@@ -1001,6 +1001,17 @@ body {
   gap: 8px;
 }
 
+.oauth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.oauth-btn__icon {
+  flex-shrink: 0;
+}
+
 .auth-links {
   display: flex;
   flex-direction: column;
