@@ -255,6 +255,9 @@ export interface EffectiveTimeline {
   trimmed: boolean;
   /** True when any requested transition duration had to be clamped. */
   anyClamped: boolean;
+  /** Seconds of fade-to-black applied to the LAST segment's tail so the video
+   * ends on black. Non-zero only when the cross-fade option is enabled. */
+  endFade: number;
 }
 
 // ---- render-time estimation ---------------------------------------------------

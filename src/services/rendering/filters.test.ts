@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildXfadeGraph,
+  fadeOutChain,
   needsXfadePath,
   scalePadChain,
   zoomChain,
@@ -98,6 +99,44 @@ describe("zoomChain", () => {
     expect(tooBig).toContain(`(${ZOOM_LIMITS.max.toFixed(4)}-1)`);
     const tooSmall = zoomChain({ type: "zoom-in", amount: 1.0 }, 4, S)!;
     expect(tooSmall).toContain(`(${ZOOM_LIMITS.min.toFixed(4)}-1)`);
+  });
+
+  it("animates a still image from ONE input frame (d=N) so the upscale is amortized", () => {
+    // 5s * 30fps = 150 frames; image kind uses d=150 (not d=1) and a larger
+    // supersample canvas it can afford because the upscale runs once.
+    const f = zoomChain({ type: "zoom-in", amount: 1.04 }, 5, S, "image")!;
+    expect(f).toContain("d=150");
+    expect(f).not.toContain("d=1:");
+    expect(f).toContain("scale=6400:3600"); // 1280x720 * factor 5
+    expect(f).toContain("s=1280x720");
+  });
+
+  it("keeps video zoom per-frame (d=1) with a modest supersample", () => {
+    const f = zoomChain({ type: "zoom-in", amount: 1.04 }, 5, S, "video")!;
+    expect(f).toContain("d=1");
+    expect(f).toContain("scale=3840:2160"); // factor 3 for video
+  });
+});
+
+describe("fadeOutChain", () => {
+  it("returns null when there is no fade", () => {
+    expect(fadeOutChain(0, 5, 30)).toBeNull();
+    expect(fadeOutChain(0.75, 0, 30)).toBeNull();
+  });
+
+  it("fades the tail to black, finishing a few frames before the end", () => {
+    const f = fadeOutChain(0.75, 5, 30)!;
+    expect(f).toContain("fade=t=out");
+    expect(f).toContain("color=black");
+    // margin = 3/30 = 0.1s; d=0.75; st = 5 - 0.1 - 0.75 = 4.15
+    expect(f).toContain("st=4.150");
+    expect(f).toContain("d=0.750");
+  });
+
+  it("never fades longer than the segment", () => {
+    const f = fadeOutChain(10, 1, 30)!;
+    // d clamps to segment (minus margin); fade still starts at/after 0
+    expect(f).toMatch(/st=0\.000/);
   });
 });
 

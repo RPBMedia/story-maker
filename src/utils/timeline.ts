@@ -126,6 +126,14 @@ export function buildTimeline(input: TimelineInput): EffectiveTimeline {
 
   const total = round(segments.length ? segments[segments.length - 1].end : 0);
 
+  // End-of-video fade to black: only when the cross-fade option is on. Clamped
+  // so it never consumes more than 90% of the final segment.
+  const lastSeg = segments[segments.length - 1];
+  const endFade =
+    projectTransition.type === "crossfade" && lastSeg
+      ? round(Math.max(0, Math.min(projectTransition.duration, lastSeg.duration * 0.9)))
+      : 0;
+
   return {
     segments,
     boundaries: finalBoundaries,
@@ -134,6 +142,7 @@ export function buildTimeline(input: TimelineInput): EffectiveTimeline {
     freezeTail: plan.freezeTail,
     trimmed: plan.trimmed,
     anyClamped: finalBoundaries.some((b) => b.clamped),
+    endFade,
   };
 }
 
@@ -210,5 +219,6 @@ function emptyTimeline(): EffectiveTimeline {
     freezeTail: 0,
     trimmed: false,
     anyClamped: false,
+    endFade: 0,
   };
 }

@@ -73,6 +73,22 @@ describe("buildTimeline — no transitions preserves existing behavior", () => {
   });
 });
 
+describe("buildTimeline — end fade to black", () => {
+  it("adds an end fade only when the cross-fade option is on", () => {
+    expect(build(30, [img(), img(), img()]).endFade).toBe(0); // no transitions
+    const faded = build(30, [img(), img(), img()], XFADE);
+    expect(faded.endFade).toBeGreaterThan(0);
+    expect(faded.endFade).toBe(0.75); // the cross-fade duration
+  });
+
+  it("never lets the end fade exceed the final segment", () => {
+    // one very short final segment + long crossfade request
+    const t = build(1, [img()], { type: "crossfade", duration: 3 });
+    expect(t.endFade).toBeGreaterThan(0);
+    expect(t.endFade).toBeLessThanOrEqual(t.segments[t.segments.length - 1].duration);
+  });
+});
+
 describe("buildTimeline — cross-fade overlap", () => {
   it("keeps the effective total equal to the soundtrack", () => {
     const t = build(30, [img(), img(), img()], XFADE);

@@ -35,6 +35,7 @@ import type {
 } from "../../types";
 import {
   buildXfadeGraph,
+  fadeOutChain,
   needsXfadePath,
   scalePadChain,
   zoomChain,
@@ -195,32 +196,37 @@ export class RenderingService {
       this.checkCancelled();
       const seg = plan.segments[i];
       const out = `seg_${i}.mp4`;
-      const zoom = zoomChain(seg.zoom, seg.duration, settings);
+      const isLast = i === plan.segments.length - 1;
+      // End-of-video dip to black on the final segment (cross-fade option on).
+      const endFade = isLast ? fadeOutChain(timeline.endFade, seg.duration, settings.fps) : null;
 
       if (seg.item.kind === "image") {
+        const zoom = zoomChain(seg.zoom, seg.duration, settings, "image");
         const stage = zoom ? w.zoom : w.images;
-        const vf = zoom ? `${scalePad},${zoom}` : scalePad;
+        let vf = zoom ? `${scalePad},${zoom}` : scalePad;
+        if (endFade) vf = `${vf},${endFade}`;
         devLogSegment(i, seg, vf);
+        // With zoom the still is animated from ONE input frame (zoompan d=N),
+        // so the supersample upscale runs once — do NOT -loop (that would
+        // multiply frames). Without zoom, loop the still for the segment.
+        const inputArgs = zoom
+          ? ["-i", visualNames[i]]
+          : [
+              "-loop", "1",
+              "-framerate", String(settings.fps),
+              "-t", seg.duration.toFixed(3),
+              "-i", visualNames[i],
+            ];
+        const encodeArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"];
+        // A static still (no zoom) encodes fastest with the stillimage tune.
+        if (!zoom) encodeArgs.push("-tune", "stillimage");
         await this.exec(
-          [
-            // -framerate makes the looped still produce exactly
-            // duration*fps frames, which zoompan (d=1) maps 1:1 so the
-            // segment duration stays exact and the zoom spans the whole clip.
-            "-loop", "1",
-            "-framerate", String(settings.fps),
-            "-t", seg.duration.toFixed(3),
-            "-i", visualNames[i],
-            "-vf", vf,
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
-            "-an",
-            out,
-          ],
+          [...inputArgs, "-vf", vf, ...encodeArgs, "-an", out],
           (r) => report(stage, (imgDone + r) / Math.max(nImages, 1)),
         );
         imgDone += 1;
       } else {
+        const zoom = zoomChain(seg.zoom, seg.duration, settings, "video");
         const args = ["-i", visualNames[i]];
         // freeze tail: extend the last frame with tpad; trim: cap with -t
         const freeze =
@@ -232,6 +238,7 @@ export class RenderingService {
             ? `${scalePad},tpad=stop_mode=clone:stop_duration=${freeze.toFixed(3)}`
             : scalePad;
         if (zoom) vf = `${vf},${zoom}`;
+        if (endFade) vf = `${vf},${endFade}`;
         devLogSegment(i, seg, vf);
         args.push("-vf", vf, "-an");
         args.push("-t", seg.duration.toFixed(3));

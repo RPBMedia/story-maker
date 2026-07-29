@@ -57,15 +57,24 @@ export function scalePadChain(s: RenderSettings): string {
  * (the trade-off is modest edge cropping while magnified). Returns null when
  * no zoom applies.
  */
-/** Largest working edge (px) allowed for the zoompan supersample canvas. */
-const SS_MAX_EDGE = 3840;
-/** Target supersample factor before the memory cap is applied. */
-const SS_FACTOR = 3;
+/**
+ * Supersample budgets. Smoothness is set by the supersample FACTOR (finer
+ * input grid → sub-pixel crop origin → no judder). Images can afford a larger
+ * canvas because their upscale is amortized: a still is animated from ONE input
+ * frame via `zoompan d=N`, so the (expensive) upscale runs once, not per frame.
+ * Video is upscaled every frame, so its canvas stays modest — and full-motion
+ * video masks residual sub-pixel jitter anyway.
+ */
+const SS_MAX_EDGE_IMAGE = 6400;
+const SS_FACTOR_IMAGE = 5;
+const SS_MAX_EDGE_VIDEO = 3840;
+const SS_FACTOR_VIDEO = 3;
 
 export function zoomChain(
   zoom: ZoomEffectSettings,
   durationSeconds: number,
   s: RenderSettings,
+  kind: "image" | "video" = "video",
 ): string | null {
   if (zoom.type === "none" || durationSeconds <= 0) return null;
   const amount = Math.min(
@@ -80,20 +89,48 @@ export function zoomChain(
     zoom.type === "zoom-in"
       ? `min(1+(${A}-1)*on/${n}\\,${A})`
       : `max(${A}-(${A}-1)*on/${n}\\,1)`;
-  // Supersample factor: SS_FACTOR, reduced so the longer working edge never
-  // exceeds SS_MAX_EDGE. High-resolution outputs already have sub-visible
-  // jitter, so they naturally fall back toward factor 1 (no upscale).
+  // Supersample factor, reduced so the longer working edge never exceeds the
+  // per-kind cap. High-resolution outputs already have sub-visible jitter, so
+  // they naturally fall back toward factor 1 (no upscale).
+  const maxEdge = kind === "image" ? SS_MAX_EDGE_IMAGE : SS_MAX_EDGE_VIDEO;
+  const factorTarget = kind === "image" ? SS_FACTOR_IMAGE : SS_FACTOR_VIDEO;
   const factor = Math.max(
     1,
-    Math.min(SS_FACTOR, Math.floor(SS_MAX_EDGE / Math.max(s.width, s.height))),
+    Math.min(factorTarget, Math.floor(maxEdge / Math.max(s.width, s.height))),
   );
   // Keep dimensions even (yuv420p) — s.width/s.height are already even.
   const superSample =
     factor > 1 ? `scale=${s.width * factor}:${s.height * factor}:flags=bicubic,` : "";
+  // Images: one input frame expanded to N output frames (d=N) so the upscale is
+  // amortized. Video: one output frame per input frame (d=1); the clip's own
+  // frames pace the animation.
+  const d = kind === "image" ? n : 1;
   return (
     `${superSample}zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-    `d=1:s=${s.width}x${s.height}:fps=${s.fps},setsar=1,format=yuv420p`
+    `d=${d}:s=${s.width}x${s.height}:fps=${s.fps},setsar=1,format=yuv420p`
   );
+}
+
+/**
+ * Fade the tail of a segment to black — used on the FINAL segment when the
+ * cross-fade option is on, so the video dips to black at the end instead of
+ * hard-cutting. Returns null when there is nothing to fade.
+ */
+export function fadeOutChain(
+  fadeSeconds: number,
+  segmentSeconds: number,
+  fps: number,
+): string | null {
+  if (fadeSeconds <= 0 || segmentSeconds <= 0) return null;
+  // Finish the fade a few frames BEFORE the segment ends so full black is
+  // actually reached (and briefly held) on the final frames — otherwise frame
+  // quantization and the filter's output PTS can leave the last frame a shade
+  // above black.
+  const frame = fps > 0 ? 1 / fps : 0;
+  const margin = 3 * frame;
+  const d = Math.min(fadeSeconds, Math.max(frame, segmentSeconds - margin));
+  const st = Math.max(0, segmentSeconds - margin - d);
+  return `fade=t=out:st=${st.toFixed(3)}:d=${d.toFixed(3)}:color=black`;
 }
 
 export interface XfadeGraph {
