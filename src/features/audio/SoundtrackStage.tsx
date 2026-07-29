@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useProject } from "../../state/ProjectContext";
+import { usePlan } from "../plan/PlanContext";
 import { UploadZone } from "../../components/UploadZone";
 import { SortableCard } from "../../components/SortableCard";
 import { useDragReorder } from "../../hooks/useDragReorder";
@@ -10,10 +11,15 @@ import type { AudioTrack } from "../../types";
 
 export function SoundtrackStage() {
   const { state, dispatch, soundtrackDuration } = useProject();
+  const { entitlements } = usePlan();
   const [busy, setBusy] = useState(false);
   const reorder = useDragReorder((from, to) =>
     dispatch({ type: "reorder-audio", from, to }),
   );
+
+  const maxTracks = entitlements.maxAudioTracks;
+  const atTrackLimit =
+    maxTracks !== null && state.audioTracks.length >= maxTracks;
 
   async function addFiles(files: File[]) {
     setBusy(true);
@@ -29,6 +35,18 @@ export function SoundtrackStage() {
       if (isDuplicate(file, [...existing, ...accepted.map((a) => a.file)])) {
         notices.push(`“${file.name}” is already in the soundtrack — skipped.`);
         continue;
+      }
+      // Plan gate: multiple audio tracks are a paid feature.
+      if (
+        maxTracks !== null &&
+        state.audioTracks.length + accepted.length >= maxTracks
+      ) {
+        notices.push(
+          `Your ${entitlements.label} plan includes ${maxTracks} audio track${
+            maxTracks === 1 ? "" : "s"
+          }. Upgrade to Creator ($5) or Pro ($15) to layer multiple tracks.`,
+        );
+        break;
       }
       try {
         const meta = await probeAV(file, "audio");
@@ -76,6 +94,22 @@ export function SoundtrackStage() {
       {busy && (
         <p className="loading-note" role="status">
           Reading audio metadata…
+        </p>
+      )}
+      {maxTracks !== null && (
+        <p className="plan-hint" role="note">
+          {atTrackLimit ? (
+            <>
+              Your <strong>{entitlements.label}</strong> plan supports{" "}
+              {maxTracks} audio track{maxTracks === 1 ? "" : "s"}. Upgrade to
+              Creator or Pro to layer multiple tracks.
+            </>
+          ) : (
+            <>
+              <strong>{entitlements.label}</strong> plan: up to {maxTracks}{" "}
+              audio track{maxTracks === 1 ? "" : "s"}.
+            </>
+          )}
         </p>
       )}
 

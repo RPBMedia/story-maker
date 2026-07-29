@@ -1493,3 +1493,141 @@ input[type="range"] {
     flex-direction: column;
   }
 }
+
+/* ---- plans / monetization ------------------------------------------------ */
+
+.plan-hint {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.plan-hint strong {
+  color: var(--text);
+}
+
+/* Upgrade prompt shown on Export when a project exceeds the plan limit */
+.upgrade-notice {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(217, 164, 65, 0.35);
+  background: linear-gradient(180deg, rgba(217, 164, 65, 0.1), transparent);
+  border-radius: var(--radius);
+}
+.upgrade-notice__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.upgrade-notice__icon {
+  color: var(--warning);
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+.upgrade-notice__title {
+  margin: 0;
+  color: var(--text);
+}
+.upgrade-notice__plans {
+  margin: 10px 0 6px;
+  padding-left: 26px;
+  display: grid;
+  gap: 4px;
+}
+.upgrade-notice__plans li {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.upgrade-notice__plans strong {
+  color: var(--text);
+}
+.upgrade-notice__hint {
+  margin: 6px 0 0 26px;
+  font-size: 0.83rem;
+  color: var(--text-dim);
+}
+
+/* God-mode plan switcher inside the account menu */
+.account__plan-note {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.account__plan-note strong {
+  color: var(--text);
+}
+.plan-switch {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 4px 0;
+}
+.plan-switch__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.plan-switch__label strong {
+  color: var(--text);
+}
+.plan-switch__god {
+  font-weight: 600;
+  color: var(--warning);
+  letter-spacing: 0.02em;
+}
+.plan-switch__options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.plan-switch__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.plan-switch__btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.plan-switch__btn--active {
+  border-color: var(--accent);
+  background: rgba(109, 141, 255, 0.14);
+  color: var(--text);
+}
+.plan-switch__name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.plan-switch__price {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.plan-switch__btn--active .plan-switch__price {
+  color: #a9bcff;
+}
+.plan-switch__reset {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+}
+.plan-switch__reset:hover {
+  text-decoration: underline;
+}

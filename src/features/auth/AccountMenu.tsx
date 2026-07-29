@@ -8,10 +8,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { usePlan } from "../plan/PlanContext";
+import { PLAN_ORDER, entitlementsFor } from "../../services/entitlements";
 import { analytics } from "../../services/analytics";
 
 export function AccountMenu() {
   const { auth, signOut } = useAuth();
+  const { plan, entitlements, isGod, override, setOverride } = usePlan();
   const [open, setOpen] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -95,14 +98,63 @@ export function AccountMenu() {
       {open && (
         <div className="account__menu card" role="menu">
           <span className="account__menu-note">Signed in as {auth.email}</span>
+
+          {isGod ? (
+            <div className="plan-switch">
+              <span className="plan-switch__label">
+                <span className="plan-switch__god" aria-hidden="true">
+                  ⚡ God mode
+                </span>
+                Testing as <strong>{entitlements.label}</strong>
+              </span>
+              <div
+                className="plan-switch__options"
+                role="group"
+                aria-label="Switch plan"
+              >
+                {PLAN_ORDER.map((p) => {
+                  const e = entitlementsFor(p);
+                  const active = plan === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`plan-switch__btn${active ? " plan-switch__btn--active" : ""}`}
+                      aria-pressed={active}
+                      onClick={() => setOverride(p)}
+                    >
+                      <span className="plan-switch__name">{e.label}</span>
+                      <span className="plan-switch__price">
+                        {e.priceMonthly === 0 ? "Free" : `$${e.priceMonthly}/mo`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {override && (
+                <button
+                  type="button"
+                  className="plan-switch__reset"
+                  onClick={() => setOverride(null)}
+                >
+                  Reset to my account plan
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className="account__plan-note">
+              Plan: <strong>{entitlements.label}</strong>
+              {entitlements.priceMonthly > 0
+                ? ` · $${entitlements.priceMonthly}/mo`
+                : ""}
+            </span>
+          )}
+
           <button type="button" role="menuitem" className="account__item" disabled>
             My Projects (coming soon)
           </button>
           <button type="button" role="menuitem" className="account__item" disabled>
             Usage (coming soon)
-          </button>
-          <button type="button" role="menuitem" className="account__item" disabled>
-            Subscription (coming soon)
           </button>
           <button type="button" role="menuitem" className="account__item" disabled>
             Account Settings (coming soon)

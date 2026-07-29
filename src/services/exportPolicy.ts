@@ -8,26 +8,12 @@
  * enforcement will require a trusted backend (server-side rendering or
  * signed export jobs).
  */
-import type { AuthState, ExportPermission } from "../types";
-
-/**
- * Future paywall threshold: videos up to and including this length will stay
- * on the free export path; longer videos will eventually require payment or
- * a paid plan. NOT enforced yet — see ENFORCE_DURATION_LIMIT below. Exported
- * so the UI can reference the same number once the rule goes live.
- */
-export const FREE_EXPORT_DURATION_LIMIT_SECONDS = 600;
-
-/**
- * Enforcement switch for the future duration-based paywall. Flip this only
- * once real payment/subscription handling exists — until then
- * evaluateExportPermission must never return "payment-required", regardless
- * of project length.
- */
-const ENFORCE_DURATION_LIMIT = false;
+import type { AuthState, ExportPermission, PlanEntitlements } from "../types";
+import { entitlementsFor } from "./entitlements";
 
 export function evaluateExportPermission(
   auth: AuthState,
+  entitlements: PlanEntitlements = entitlementsFor("free"),
   projectDurationSeconds?: number,
 ): ExportPermission {
   // While the session is still resolving, exporting must NOT be allowed —
@@ -54,19 +40,23 @@ export function evaluateExportPermission(
   // Signed in from here on. Future quota checks land here, e.g.
   //   if (quotaExceeded(auth.profile)) return { status: "quota-exceeded" };
 
-  // Future duration-based paywall (inert until ENFORCE_DURATION_LIMIT flips).
+  // Duration paywall: the current plan's max length. null = unlimited (Pro).
+  const limit = entitlements.maxProjectDurationSeconds;
   if (
-    ENFORCE_DURATION_LIMIT &&
+    limit !== null &&
     projectDurationSeconds !== undefined &&
-    projectDurationSeconds > FREE_EXPORT_DURATION_LIMIT_SECONDS
+    projectDurationSeconds > limit + DURATION_TOLERANCE_SECONDS
   ) {
     return {
       status: "payment-required",
       reason: "duration-limit",
-      thresholdSeconds: FREE_EXPORT_DURATION_LIMIT_SECONDS,
+      thresholdSeconds: limit,
       projectDurationSeconds,
     };
   }
 
   return { status: "allowed" };
 }
+
+/** Small slack so a project that rounds to exactly the limit isn't blocked. */
+const DURATION_TOLERANCE_SECONDS = 0.5;

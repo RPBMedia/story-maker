@@ -1,26 +1,34 @@
 import { describe, expect, it } from "vitest";
-import {
-  evaluateExportPermission,
-  FREE_EXPORT_DURATION_LIMIT_SECONDS,
-} from "./exportPolicy";
+import { evaluateExportPermission } from "./exportPolicy";
+import { entitlementsFor } from "./entitlements";
 import type { AuthState } from "../types";
 
 function auth(status: AuthState["status"]): AuthState {
   return { status, userId: null, email: null, profile: null };
 }
 
+const FREE = entitlementsFor("free");
+const CREATOR = entitlementsFor("creator");
+const PRO = entitlementsFor("professional");
+
+const signedIn: AuthState = {
+  status: "signed-in",
+  userId: "u1",
+  email: "a@b.c",
+  profile: null,
+};
+
 describe("evaluateExportPermission — purity / no side effects", () => {
   it("is a pure function: same input → same output, no mutation of auth", () => {
     const signedOut = auth("signed-out");
     const frozen = Object.freeze({ ...signedOut });
-    const a = evaluateExportPermission(frozen, 120);
-    const b = evaluateExportPermission(frozen, 120);
+    const a = evaluateExportPermission(frozen, FREE, 60);
+    const b = evaluateExportPermission(frozen, FREE, 60);
     expect(a).toEqual(b);
-    // calling it did not mutate the input (frozen would throw on write)
     expect(frozen.status).toBe("signed-out");
   });
 
-  it("never authenticates as a side effect: signed-out stays authentication-required across repeated calls", () => {
+  it("never authenticates as a side effect", () => {
     const signedOut = auth("signed-out");
     for (let i = 0; i < 5; i++) {
       expect(evaluateExportPermission(signedOut).status).toBe(
@@ -28,17 +36,9 @@ describe("evaluateExportPermission — purity / no side effects", () => {
       );
     }
   });
-
-  it("does not import or touch Supabase (module has no auth client dependency)", async () => {
-    // If exportPolicy pulled in the Supabase client, importing it in a bare
-    // module context would construct the client. It imports only types, so
-    // this import is side-effect free.
-    const mod = await import("./exportPolicy");
-    expect(typeof mod.evaluateExportPermission).toBe("function");
-  });
 });
 
-describe("evaluateExportPermission", () => {
+describe("evaluateExportPermission — auth states", () => {
   it("requires authentication when signed out", () => {
     expect(evaluateExportPermission(auth("signed-out")).status).toBe(
       "authentication-required",
@@ -51,57 +51,56 @@ describe("evaluateExportPermission", () => {
     );
   });
 
-  it("allows export when signed in", () => {
-    expect(
-      evaluateExportPermission({
-        status: "signed-in",
-        userId: "u1",
-        email: "a@b.c",
-        profile: null,
-      }).status,
-    ).toBe("allowed");
-  });
-
-  it("reports unavailable (with a calm message) when auth is unconfigured", () => {
+  it("reports unavailable (calm message) when auth is unconfigured", () => {
     const p = evaluateExportPermission(auth("unconfigured"));
     expect(p.status).toBe("unavailable");
     if (p.status === "unavailable") {
-      // Must never leak env var names or "not configured" into the message
-      // consumers show by default — that's the exact bug this replaces.
       expect(p.message).not.toMatch(/VITE_SUPABASE|not configured|environment/i);
       expect(p.message.length).toBeGreaterThan(0);
     }
   });
 
-  describe("future duration-based paywall (prepared, not enforced)", () => {
-    const signedIn: AuthState = {
-      status: "signed-in",
-      userId: "u1",
-      email: "a@b.c",
-      profile: null,
-    };
+  it("allows a short project when signed in", () => {
+    expect(evaluateExportPermission(signedIn, FREE, 60).status).toBe("allowed");
+  });
+});
 
-    it("the 600-second threshold constant exists", () => {
-      expect(FREE_EXPORT_DURATION_LIMIT_SECONDS).toBe(600);
-    });
+describe("evaluateExportPermission — duration paywall by plan", () => {
+  it("blocks a Free export beyond 120s with payment-required/duration-limit", () => {
+    const p = evaluateExportPermission(signedIn, FREE, 200);
+    expect(p.status).toBe("payment-required");
+    if (p.status === "payment-required") {
+      expect(p.reason).toBe("duration-limit");
+      expect(p.thresholdSeconds).toBe(120);
+      expect(p.projectDurationSeconds).toBe(200);
+    }
+  });
 
-    it("never returns payment-required in this iteration, even far past the threshold", () => {
-      const shortProject = evaluateExportPermission(signedIn, 60);
-      const longProject = evaluateExportPermission(signedIn, 3600);
-      const noDuration = evaluateExportPermission(signedIn);
-      expect(shortProject.status).toBe("allowed");
-      expect(longProject.status).toBe("allowed");
-      expect(noDuration.status).toBe("allowed");
-    });
+  it("allows a Free export at exactly the 120s limit (with rounding slack)", () => {
+    expect(evaluateExportPermission(signedIn, FREE, 120).status).toBe("allowed");
+    expect(evaluateExportPermission(signedIn, FREE, 120.4).status).toBe("allowed");
+  });
 
-    it("no permission result of any kind carries status payment-required today", () => {
-      const statuses = [
-        evaluateExportPermission(auth("signed-out"), 9999),
-        evaluateExportPermission(auth("loading"), 9999),
-        evaluateExportPermission(auth("unconfigured"), 9999),
-        evaluateExportPermission(signedIn, 9999),
-      ].map((p) => p.status);
-      expect(statuses).not.toContain("payment-required");
-    });
+  it("Creator extends the limit to 10 minutes", () => {
+    expect(evaluateExportPermission(signedIn, CREATOR, 200).status).toBe("allowed");
+    expect(evaluateExportPermission(signedIn, CREATOR, 601).status).toBe(
+      "payment-required",
+    );
+  });
+
+  it("Pro has no duration limit", () => {
+    expect(evaluateExportPermission(signedIn, PRO, 99999).status).toBe("allowed");
+  });
+
+  it("never charges before sign-in — signed-out over the limit is auth-required", () => {
+    expect(evaluateExportPermission(auth("signed-out"), FREE, 9999).status).toBe(
+      "authentication-required",
+    );
+  });
+
+  it("defaults to the free plan when no entitlements are passed", () => {
+    expect(evaluateExportPermission(signedIn, undefined, 9999).status).toBe(
+      "payment-required",
+    );
   });
 });

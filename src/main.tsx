@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { App } from "./app/App";
 import { ProjectProvider } from "./state/ProjectContext";
 import { AuthProvider } from "./features/auth/AuthContext";
+import { PlanProvider } from "./features/plan/PlanContext";
 import {
   ForgotPasswordPage,
   ResetPasswordPage,
@@ -17,7 +18,8 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <ProjectProvider>
+        <PlanProvider>
+          <ProjectProvider>
           <Routes>
             <Route path="/auth/sign-in" element={<SignInPage />} />
             <Route path="/auth/sign-up" element={<SignUpPage />} />
@@ -28,7 +30,8 @@ createRoot(document.getElementById("root")!).render(
                 users can build a full project; only export is gated. */}
             <Route path="*" element={<App />} />
           </Routes>
-        </ProjectProvider>
+          </ProjectProvider>
+        </PlanProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

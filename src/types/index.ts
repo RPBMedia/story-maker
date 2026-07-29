@@ -283,15 +283,29 @@ export interface RenderTimingState {
 
 export type PlanId = "free" | "creator" | "professional";
 
-/** Extensible entitlement model — NOT enforced yet (groundwork only). */
+/** What each plan is allowed to do. Values live in services/entitlements.ts. */
 export interface PlanEntitlements {
   plan: PlanId;
-  exportQuotaPerMonth: number | null; // null = unlimited
-  maxResolution: { width: number; height: number };
-  watermark: boolean;
+  /** Display name, e.g. "Free", "Creator", "Pro". */
+  label: string;
+  /** Price per month in USD (0 for free). */
+  priceMonthly: number;
+  /** Max exported video length in seconds; null = unlimited. */
   maxProjectDurationSeconds: number | null;
-  storageBytes: number | null;
+  /** Max number of soundtrack audio tracks; null = unlimited. */
+  maxAudioTracks: number | null;
+  maxResolution: { width: number; height: number };
+  /** Max frame rate. */
+  maxFps: number;
+  /** True when exports carry a StoryMaker watermark. */
+  watermark: boolean;
+  /** Cross-fades / zoom effects available. */
+  effects: boolean;
+  /** Exports allowed per month; null = unlimited. */
+  exportQuotaPerMonth: number | null;
+  /** Fast/priority server-side rendering (vs in-browser). */
   serverRendering: boolean;
+  storageBytes: number | null;
 }
 
 export interface UserProfile {
@@ -319,10 +333,10 @@ export interface AuthState {
 /**
  * Central export authorization result (extensible for monetization).
  *
- * `payment-required` with `reason: "duration-limit"` is groundwork for a
- * future rule — see FREE_EXPORT_DURATION_LIMIT_SECONDS in exportPolicy.ts.
- * It is modeled here so the UI can render it correctly whenever it starts
- * appearing, but exportPolicy.ts never returns it in this iteration.
+ * `payment-required` with `reason: "duration-limit"` is returned when a
+ * project exceeds the current plan's `maxProjectDurationSeconds` (see
+ * exportPolicy.ts + services/entitlements.ts). The UI renders an upgrade
+ * prompt for it.
  */
 export type ExportPermission =
   | { status: "allowed" }

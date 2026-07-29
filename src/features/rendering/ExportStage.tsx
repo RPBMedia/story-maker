@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useProject } from "../../state/ProjectContext";
 import { useAuth } from "../auth/AuthContext";
+import { usePlan } from "../plan/PlanContext";
+import { entitlementsFor } from "../../services/entitlements";
 import { AccountGateModal } from "../auth/AccountGateModal";
 import { AccountUnavailableNotice } from "../auth/AuthForms";
 import { evaluateExportPermission } from "../../services/exportPolicy";
@@ -24,6 +26,7 @@ export function ExportStage() {
   const { state, dispatch, timeline, soundtrackDuration, isValid } =
     useProject();
   const { auth } = useAuth();
+  const { entitlements, isGod } = usePlan();
   const [detailOpen, setDetailOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -32,9 +35,8 @@ export function ExportStage() {
 
   const { renderStatus, renderProgress, result, error } = state;
   const rendering = renderStatus === "rendering";
-  // Project duration is passed through so the (currently inert) future
-  // duration-based paywall check has real data to work with once enabled.
-  const permission = evaluateExportPermission(auth, timeline.total);
+  // Gate on the current plan's entitlements (duration limit etc.).
+  const permission = evaluateExportPermission(auth, entitlements, timeline.total);
 
   const estimate =
     timeline.segments.length > 0
@@ -175,7 +177,10 @@ export function ExportStage() {
   ).length;
 
   const generateDisabled =
-    !isValid || auth.status === "loading" || permission.status === "unavailable";
+    !isValid ||
+    auth.status === "loading" ||
+    permission.status === "unavailable" ||
+    permission.status === "payment-required";
   const generateLabel =
     isValid && auth.status === "loading" ? "Checking your account…" : "Generate Video";
 
@@ -257,6 +262,49 @@ export function ExportStage() {
               </p>
             </div>
           )}
+          {permission.status === "payment-required" &&
+            permission.reason === "duration-limit" && (
+              <div className="upgrade-notice" role="status">
+                <div className="upgrade-notice__head">
+                  <span className="upgrade-notice__icon" aria-hidden="true">
+                    ✦
+                  </span>
+                  <p className="upgrade-notice__title">
+                    Your <strong>{entitlements.label}</strong> plan exports
+                    videos up to{" "}
+                    <strong>{formatDuration(permission.thresholdSeconds)}</strong>
+                    . This one is{" "}
+                    <strong>
+                      {formatDuration(permission.projectDurationSeconds)}
+                    </strong>
+                    .
+                  </p>
+                </div>
+                <ul className="upgrade-notice__plans">
+                  {(["creator", "professional"] as const)
+                    .map((p) => entitlementsFor(p))
+                    .filter(
+                      (e) =>
+                        e.maxProjectDurationSeconds === null ||
+                        e.maxProjectDurationSeconds >
+                          (permission.thresholdSeconds ?? 0),
+                    )
+                    .map((e) => (
+                      <li key={e.plan}>
+                        <strong>{e.label}</strong> — ${e.priceMonthly}/mo ·{" "}
+                        {e.maxProjectDurationSeconds === null
+                          ? "unlimited length"
+                          : `up to ${formatDuration(e.maxProjectDurationSeconds)}`}
+                      </li>
+                    ))}
+                </ul>
+                <p className="upgrade-notice__hint">
+                  {isGod
+                    ? "God mode: switch plans from the account menu (top-right) to test any tier — no payment."
+                    : "Upgrade from the account menu to export longer videos."}
+                </p>
+              </div>
+            )}
 
           {showConfirmation ? (
             <div className="confirm-panel card">
