@@ -1,5 +1,6 @@
 import type {
   AudioTrack,
+  OrderingMode,
   RenderError,
   RenderProgress,
   RenderResult,
@@ -25,10 +26,22 @@ export const STAGES: { id: StageId; label: string }[] = [
   { id: "export", label: "Export" },
 ];
 
+/** One level of undo for automatic ordering: the sequence and mode that were
+ * in effect immediately BEFORE the last sort/shuffle. */
+export interface OrderSnapshot {
+  items: VisualMediaItem[];
+  mode: OrderingMode;
+}
+
 export interface ProjectState {
   stage: StageId;
   audioTracks: AudioTrack[];
   visualItems: VisualMediaItem[];
+  /** How the current visual sequence was ordered. */
+  orderingMode: OrderingMode;
+  /** Snapshot enabling a single Undo of the last automatic ordering; null when
+   * there is nothing to undo (e.g. after a manual drag or an upload). */
+  orderSnapshot: OrderSnapshot | null;
   settings: RenderSettings;
   /** Project-wide effect defaults; items may override (null = inherit). */
   projectTransition: TransitionSettings;
@@ -49,6 +62,8 @@ export const initialProjectState: ProjectState = {
   stage: "soundtrack",
   audioTracks: [],
   visualItems: [],
+  orderingMode: "manual",
+  orderSnapshot: null,
   settings: DEFAULT_RENDER_SETTINGS,
   projectTransition: DEFAULT_TRANSITION,
   projectZoom: DEFAULT_ZOOM,
@@ -69,6 +84,10 @@ export type ProjectAction =
   | { type: "add-visual"; items: VisualMediaItem[] }
   | { type: "remove-visual"; id: string }
   | { type: "reorder-visual"; from: number; to: number }
+  /** Replace the whole sequence with a pre-computed automatic ordering
+   * (sort or shuffle). `items` must be a re-ordering of the current items. */
+  | { type: "set-ordering"; mode: OrderingMode; items: VisualMediaItem[] }
+  | { type: "undo-ordering" }
   | { type: "set-project-transition"; transition: TransitionSettings }
   | { type: "set-project-zoom"; zoom: ZoomEffectSettings }
   | { type: "set-item-transition"; id: string; transition: TransitionSettings | null }
@@ -142,25 +161,67 @@ export function projectReducer(
     }
 
     case "add-visual":
+      // New uploads append and reset ordering to Manual — existing media is
+      // never silently re-sorted, and the previous undo point is discarded.
       return {
         ...state,
         exportConfirmed: false,
         visualItems: [...state.visualItems, ...action.items],
+        orderingMode: "manual",
+        orderSnapshot: null,
       };
 
     case "remove-visual": {
       const item = state.visualItems.find((i) => i.id === action.id);
       if (item) URL.revokeObjectURL(item.previewUrl);
+      // A removal invalidates any pending undo (its snapshot references the
+      // removed item); the ordering mode itself still holds for what remains.
       return {
         ...state,
         exportConfirmed: false,
         visualItems: state.visualItems.filter((i) => i.id !== action.id),
+        orderSnapshot: null,
       };
     }
 
     case "reorder-visual": {
       const moved = move(state.visualItems, action.from, action.to);
-      return moved === state.visualItems ? state : { ...state, visualItems: moved };
+      if (moved === state.visualItems) return state;
+      // A manual drag/move switches the mode to Manual and stops automatic
+      // sorting; the last automatic-ordering undo point is cleared.
+      return {
+        ...state,
+        exportConfirmed: false,
+        visualItems: moved,
+        orderingMode: "manual",
+        orderSnapshot: null,
+      };
+    }
+
+    case "set-ordering": {
+      // Store the resulting order verbatim (the renderer uses it as-is) and
+      // capture the prior order+mode so a single Undo can restore it exactly.
+      return {
+        ...state,
+        exportConfirmed: false,
+        visualItems: action.items,
+        orderingMode: action.mode,
+        orderSnapshot: {
+          items: state.visualItems,
+          mode: state.orderingMode,
+        },
+      };
+    }
+
+    case "undo-ordering": {
+      if (!state.orderSnapshot) return state;
+      return {
+        ...state,
+        exportConfirmed: false,
+        visualItems: state.orderSnapshot.items,
+        orderingMode: state.orderSnapshot.mode,
+        orderSnapshot: null,
+      };
     }
 
     case "set-project-transition":

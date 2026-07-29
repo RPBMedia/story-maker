@@ -20,6 +20,8 @@ function img(): ImageMediaItem {
   return {
     id: `img-${id}`,
     kind: "image",
+    createdAt: 1_700_000_000_000,
+    dateSource: "upload-time",
     file: new File([], `i${id}.png`),
     name: `i${id}.png`,
     size: 1,
