@@ -34,6 +34,7 @@ function withReturnTo(path: string, returnTo: string): string {
 function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="auth-page">
+      <div className="bg-ambient" aria-hidden="true" />
       <div className="auth-card card">
         <div className="topbar__brand auth-brand">
           <span className="topbar__logo" aria-hidden="true">

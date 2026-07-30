@@ -351,20 +351,43 @@ export function ExportStage() {
 
       {rendering && (
         <div className="render-progress" role="status" aria-live="polite">
-          <div className="render-progress__head">
-            <span className="render-progress__stage">
-              {RENDER_STAGE_LABELS[renderProgress.stage]}
-            </span>
-            <span className="render-progress__pct">{pct}%</span>
-          </div>
+          {/* Gradient progress ring; r=80 → circumference 2π·80 ≈ 502.65 */}
           <div
-            className="progress-track"
+            className="progress-ring"
             role="progressbar"
             aria-valuenow={pct}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-label="Render progress"
           >
-            <div className="progress-fill" style={{ width: `${pct}%` }} />
+            <svg viewBox="0 0 180 180" aria-hidden="true">
+              <defs>
+                <linearGradient id="progress-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#6d8dff" />
+                  <stop offset="1" stopColor="#9a7bff" />
+                </linearGradient>
+              </defs>
+              <circle className="progress-ring__track" cx="90" cy="90" r="80" />
+              <circle
+                className="progress-ring__bar"
+                cx="90"
+                cy="90"
+                r="80"
+                strokeDasharray={502.65}
+                strokeDashoffset={502.65 * (1 - pct / 100)}
+              />
+            </svg>
+            <div className="progress-ring__center">
+              <span className="progress-ring__pct">
+                {pct}
+                <span>%</span>
+              </span>
+            </div>
+          </div>
+          <div className="render-progress__head">
+            <span className="render-progress__stage">
+              {RENDER_STAGE_LABELS[renderProgress.stage]}
+            </span>
           </div>
           <div className="render-progress__timing">
             <span>Elapsed: {formatMs(elapsedMs)}</span>

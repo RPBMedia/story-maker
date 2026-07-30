@@ -38,6 +38,9 @@ export function App() {
 
   return (
     <div className="shell">
+      {/* Premium Studio ambient backdrop: vignette + drifting glows + grid.
+          Purely decorative; fixed behind all content. */}
+      <div className="bg-ambient" aria-hidden="true" />
       <header className="topbar">
         <h1 className="topbar__brand">
           <button

@@ -402,3 +402,53 @@ describe("no automatic authentication; explicit action only", () => {
     expect(authSpies.signInWithPassword).not.toHaveBeenCalled();
   });
 });
+
+/** Monetization: the Free plan's 120s duration paywall (see entitlements.ts). */
+function SeededLongExport() {
+  const { state, dispatch } = useProject();
+  useEffect(() => {
+    if (state.audioTracks.length === 0) {
+      dispatch({ type: "add-audio", tracks: [track(200)] }); // > 120s free cap
+      dispatch({ type: "add-visual", items: [image()] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <ExportStage />;
+}
+
+describe("duration paywall (Free plan, 120s)", () => {
+  it("a signed-in free user over 120s sees the upgrade prompt with both paid tiers, and cannot render", async () => {
+    setMockAuthState({
+      status: "signed-in",
+      userId: "u1",
+      email: "someone@else.com", // NOT the god account
+      profile: null, // plan defaults to free
+    });
+    renderWithProviders(<SeededLongExport />);
+
+    // The upgrade prompt names the plan, the cap, and the project length…
+    expect(await screen.findByText(/plan exports videos up to/)).toBeTruthy();
+    // …and offers both paid tiers with prices.
+    expect(screen.getByText(/Creator/)).toBeTruthy();
+    expect(screen.getByText(/\$5\/mo/)).toBeTruthy();
+    expect(screen.getByText(/\$15\/mo/)).toBeTruthy();
+
+    // Generate is disabled — no way to start a render over the cap.
+    const btn = screen.getByRole("button", { name: "Generate Video" });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    // And the confirmation panel never appears.
+    expect(screen.queryByText("Ready to render?")).toBeNull();
+  });
+
+  it("a signed-in free user under 120s renders normally (no upgrade prompt)", async () => {
+    setMockAuthState({
+      status: "signed-in",
+      userId: "u1",
+      email: "someone@else.com",
+      profile: null,
+    });
+    renderWithProviders(<SeededExport />); // 10s project
+    expect(await screen.findByText("Ready to render?")).toBeTruthy();
+    expect(screen.queryByText(/plan exports videos up to/)).toBeNull();
+  });
+});

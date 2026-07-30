@@ -18,6 +18,12 @@ import { MemoryRouter } from "react-router-dom";
 import { useSyncExternalStore } from "react";
 import { vi } from "vitest";
 import type { ReactNode } from "react";
+// NOTE: helpers must NOT import PlanContext (or anything else that imports
+// AuthContext): the vi.mock("../auth/AuthContext") factories in test files
+// `await import` THIS module, so a static chain helpers → PlanContext →
+// AuthContext would deadlock module resolution. Tests that need the real
+// PlanProvider wrap it themselves (its usePlan falls back to the free plan
+// when absent).
 import { ProjectProvider } from "../state/ProjectContext";
 import type { AuthState } from "../types";
 import type { AuthApi } from "../features/auth/AuthContext";
