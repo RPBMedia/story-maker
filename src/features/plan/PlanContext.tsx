@@ -51,7 +51,12 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     readOverride(),
   );
 
-  const isGod = isGodModeEmail(auth.email);
+  // God mode is a dev/testing affordance — OFF in production so real users
+  // (and the owner testing real payments) hit the real paywall. Re-enable on a
+  // deployed build only by setting VITE_ENABLE_GOD_MODE="true".
+  const godAllowed =
+    import.meta.env.DEV || import.meta.env.VITE_ENABLE_GOD_MODE === "true";
+  const isGod = godAllowed && isGodModeEmail(auth.email);
   const accountPlan: PlanId = auth.profile?.plan ?? "free";
   // Only the god account may deviate from its account plan.
   const plan: PlanId = isGod && override ? override : accountPlan;

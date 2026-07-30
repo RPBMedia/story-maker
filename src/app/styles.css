@@ -1885,3 +1885,145 @@ input[type="range"] {
 .legal-footer {
   font-size: 0.9rem;
 }
+
+/* ---- billing / account --------------------------------------------------- */
+.checkout-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--glass-2);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.checkout-banner--success {
+  border-color: rgba(75, 178, 122, 0.4);
+  background: linear-gradient(180deg, rgba(75, 178, 122, 0.14), transparent);
+}
+.checkout-banner__close {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.checkout-banner__close:hover {
+  color: var(--text);
+}
+
+.upgrade-notice__plans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 6px;
+}
+.upgrade-notice__plan {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 16px;
+}
+.upgrade-notice__plan-note {
+  font-size: 0.72rem;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* account page (built on the .legal layout) */
+.account.card {
+  padding: 30px 34px 28px;
+}
+.account h2 {
+  font-size: 1.05rem;
+  margin: 0 0 12px;
+}
+.account-block {
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+}
+.account-block:first-of-type {
+  border-top: none;
+}
+.account-msg {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  margin: 4px 0 12px;
+}
+.account-msg--ok {
+  border: 1px solid rgba(75, 178, 122, 0.35);
+  color: #8fe4b4;
+}
+.account-msg--err {
+  border: 1px solid rgba(226, 99, 90, 0.4);
+  color: #f0a49d;
+}
+.eyebrow-inline {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+}
+.account-plan-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.account-plan-name {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.account-plan-price {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+.account-plan-includes {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 18px;
+  display: grid;
+  gap: 6px;
+}
+.account-plan-includes li {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.account-plan-includes strong {
+  color: var(--text);
+}
+.account-upgrade-row,
+.account-danger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.account-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.field-input {
+  flex: 1;
+  min-width: 220px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.field-input:focus-visible {
+  outline: 2px solid var(--accent);
+}

@@ -38,6 +38,8 @@ export interface AuthApi {
   requestPasswordReset(email: string): Promise<string | null>;
   updatePassword(newPassword: string): Promise<string | null>;
   signOut(): Promise<void>;
+  /** Re-fetch the profile row (plan/export_count) from the database. */
+  reloadProfile(): Promise<void>;
 }
 
 const AuthContext = createContext<AuthApi | null>(null);
@@ -106,41 +108,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Enrich the (already session-derived) profile with the DB row's plan /
-  // export_count. Runs once per signed-in user; merges rather than
-  // overwrites, so the session's avatar/name survive even when the profiles
-  // row lacks them. Best-effort; RLS scopes the read to the user's own row.
-  const profileLoadedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!supabase || auth.status !== "signed-in" || !auth.userId) return;
-    if (profileLoadedFor.current === auth.userId) return;
-    profileLoadedFor.current = auth.userId;
-    let disposed = false;
-    supabase
+  // export_count. Merges rather than overwrites, so the session's avatar/name
+  // survive even when the profiles row lacks them. RLS scopes the read to the
+  // user's own row.
+  const loadProfileFor = useCallback(async (userId: string) => {
+    if (!supabase) return;
+    const { data } = await supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, plan, export_count")
-      .eq("id", auth.userId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (disposed || !data) return;
-        setAuth((cur) => {
-          if (cur.userId !== data.id) return cur;
-          const merged: UserProfile = {
-            id: data.id,
-            email: data.email ?? cur.profile?.email ?? null,
-            // prefer whatever is non-empty; session metadata usually wins for
-            // OAuth avatars, the DB row for a user's later customizations
-            displayName: cur.profile?.displayName ?? data.display_name ?? null,
-            avatarUrl: cur.profile?.avatarUrl ?? data.avatar_url ?? null,
-            plan: data.plan ?? "free",
-            exportCount: data.export_count ?? 0,
-          };
-          return { ...cur, profile: merged };
-        });
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [auth.status, auth.userId]);
+      .eq("id", userId)
+      .maybeSingle();
+    if (!data) return;
+    setAuth((cur) => {
+      if (cur.userId !== data.id) return cur;
+      const merged: UserProfile = {
+        id: data.id,
+        email: data.email ?? cur.profile?.email ?? null,
+        displayName: cur.profile?.displayName ?? data.display_name ?? null,
+        avatarUrl: cur.profile?.avatarUrl ?? data.avatar_url ?? null,
+        plan: data.plan ?? "free",
+        exportCount: data.export_count ?? 0,
+      };
+      return { ...cur, profile: merged };
+    });
+  }, []);
+
+  // Runs once per signed-in user on load.
+  const profileLoadedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (auth.status !== "signed-in" || !auth.userId) return;
+    if (profileLoadedFor.current === auth.userId) return;
+    profileLoadedFor.current = auth.userId;
+    void loadProfileFor(auth.userId);
+  }, [auth.status, auth.userId, loadProfileFor]);
+
+  /** Re-fetch the profile row — e.g. after returning from Stripe Checkout so
+   * a freshly-upgraded plan shows without a full reload. */
+  const reloadProfile = useCallback(async () => {
+    if (auth.status === "signed-in" && auth.userId) {
+      await loadProfileFor(auth.userId);
+    }
+  }, [auth.status, auth.userId, loadProfileFor]);
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
@@ -305,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       updatePassword,
       signOut,
+      reloadProfile,
     }),
     [
       auth,
@@ -315,6 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       updatePassword,
       signOut,
+      reloadProfile,
     ],
   );
 

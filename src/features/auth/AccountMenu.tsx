@@ -14,7 +14,8 @@ import { analytics } from "../../services/analytics";
 
 export function AccountMenu() {
   const { auth, signOut } = useAuth();
-  const { plan, entitlements, isGod, override, setOverride } = usePlan();
+  const { plan, entitlements, isGod, override, setOverride, accountPlan } =
+    usePlan();
   const [open, setOpen] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -150,14 +151,26 @@ export function AccountMenu() {
             </span>
           )}
 
+          <Link
+            to="/account"
+            role="menuitem"
+            className="account__item"
+            onClick={() => setOpen(false)}
+          >
+            Account &amp; billing
+          </Link>
+          {accountPlan !== "free" && (
+            <Link
+              to="/account"
+              role="menuitem"
+              className="account__item"
+              onClick={() => setOpen(false)}
+            >
+              Manage subscription
+            </Link>
+          )}
           <button type="button" role="menuitem" className="account__item" disabled>
             My Projects (coming soon)
-          </button>
-          <button type="button" role="menuitem" className="account__item" disabled>
-            Usage (coming soon)
-          </button>
-          <button type="button" role="menuitem" className="account__item" disabled>
-            Account Settings (coming soon)
           </button>
           <button
             type="button"

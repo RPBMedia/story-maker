@@ -74,6 +74,7 @@ function makeAuthSpies() {
     signOut: vi.fn(async () => {
       setMockAuthState(defaultAuthState("signed-out"));
     }),
+    reloadProfile: vi.fn(async () => {}),
   };
 }
 
@@ -136,6 +137,7 @@ export function makeAuthApi(status: AuthState["status"]): AuthApi {
     requestPasswordReset: vi.fn(async () => null),
     updatePassword: vi.fn(async () => null),
     signOut: vi.fn(async () => undefined),
+    reloadProfile: vi.fn(async () => {}),
   };
 }
 

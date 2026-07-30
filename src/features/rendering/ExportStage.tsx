@@ -3,6 +3,7 @@ import { useProject } from "../../state/ProjectContext";
 import { useAuth } from "../auth/AuthContext";
 import { usePlan } from "../plan/PlanContext";
 import { entitlementsFor } from "../../services/entitlements";
+import { startCheckout } from "../../services/billing";
 import { AccountGateModal } from "../auth/AccountGateModal";
 import { AccountUnavailableNotice } from "../auth/AuthForms";
 import { evaluateExportPermission } from "../../services/exportPolicy";
@@ -28,6 +29,10 @@ export function ExportStage() {
   const { auth } = useAuth();
   const { entitlements, isGod } = usePlan();
   const [detailOpen, setDetailOpen] = useState(false);
+  const [upgradeBusy, setUpgradeBusy] = useState<
+    "creator" | "professional" | null
+  >(null);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
@@ -119,6 +124,19 @@ export function ExportStage() {
           projectIntact: true,
         },
       });
+    }
+  }
+
+  async function beginUpgrade(plan: "creator" | "professional") {
+    setUpgradeError(null);
+    setUpgradeBusy(plan);
+    try {
+      await startCheckout(plan); // redirects to Stripe on success
+    } catch (e) {
+      setUpgradeBusy(null);
+      setUpgradeError(
+        e instanceof Error ? e.message : "Could not start checkout.",
+      );
     }
   }
 
@@ -280,7 +298,7 @@ export function ExportStage() {
                     .
                   </p>
                 </div>
-                <ul className="upgrade-notice__plans">
+                <div className="upgrade-notice__plans">
                   {(["creator", "professional"] as const)
                     .map((p) => entitlementsFor(p))
                     .filter(
@@ -290,18 +308,33 @@ export function ExportStage() {
                           (permission.thresholdSeconds ?? 0),
                     )
                     .map((e) => (
-                      <li key={e.plan}>
-                        <strong>{e.label}</strong> — ${e.priceMonthly}/mo ·{" "}
-                        {e.maxProjectDurationSeconds === null
-                          ? "unlimited length"
-                          : `up to ${formatDuration(e.maxProjectDurationSeconds)}`}
-                      </li>
+                      <button
+                        key={e.plan}
+                        type="button"
+                        className={`btn ${e.plan === "creator" ? "btn--primary" : ""} upgrade-notice__plan`}
+                        disabled={upgradeBusy !== null}
+                        onClick={() => beginUpgrade(e.plan as "creator" | "professional")}
+                      >
+                        {upgradeBusy === e.plan
+                          ? "Opening checkout…"
+                          : `Upgrade to ${e.label} — $${e.priceMonthly}/mo`}
+                        <span className="upgrade-notice__plan-note">
+                          {e.maxProjectDurationSeconds === null
+                            ? "unlimited length"
+                            : `up to ${formatDuration(e.maxProjectDurationSeconds)}`}
+                        </span>
+                      </button>
                     ))}
-                </ul>
+                </div>
+                {upgradeError && (
+                  <p className="warning-inline" role="alert">
+                    {upgradeError}
+                  </p>
+                )}
                 <p className="upgrade-notice__hint">
                   {isGod
-                    ? "God mode: switch plans from the account menu (top-right) to test any tier — no payment."
-                    : "Upgrade from the account menu to export longer videos."}
+                    ? "God mode (dev): switch plans from the account menu to test any tier — no payment."
+                    : "Secure checkout by Stripe. Cancel anytime from Account."}
                 </p>
               </div>
             )}

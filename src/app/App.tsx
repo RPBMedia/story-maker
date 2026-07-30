@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { useProject } from "../state/ProjectContext";
+import { useAuth } from "../features/auth/AuthContext";
 import { STAGES, type StageId } from "../state/projectReducer";
 import { SoundtrackStage } from "../features/audio/SoundtrackStage";
 import { MediaStage } from "../features/media/MediaStage";
@@ -11,6 +13,27 @@ import { renderingService } from "../services/rendering/RenderingService";
 
 export function App() {
   const { state, dispatch, soundtrackDuration, isValid } = useProject();
+  const { reloadProfile } = useAuth();
+  const [checkoutBanner, setCheckoutBanner] = useState<
+    "success" | "cancelled" | null
+  >(null);
+
+  // Returning from Stripe Checkout: the webhook may take a moment to flip the
+  // plan, so re-fetch the profile a few times and show a confirmation banner.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get("checkout");
+    if (checkout !== "success" && checkout !== "cancelled") return;
+    setCheckoutBanner(checkout);
+    // strip the query param so a refresh doesn't repeat the banner
+    window.history.replaceState({}, "", window.location.pathname);
+    if (checkout === "success") {
+      const timers = [1500, 4000, 8000].map((ms) =>
+        window.setTimeout(() => void reloadProfile(), ms),
+      );
+      return () => timers.forEach((t) => window.clearTimeout(t));
+    }
+  }, [reloadProfile]);
 
   const done: Record<StageId, boolean> = {
     soundtrack: state.audioTracks.length > 0,
@@ -96,6 +119,27 @@ export function App() {
           ))}
         </ol>
       </nav>
+
+      {checkoutBanner && (
+        <div
+          className={`checkout-banner checkout-banner--${checkoutBanner}`}
+          role="status"
+        >
+          <span>
+            {checkoutBanner === "success"
+              ? "Payment received — thanks! Your plan is activating (this can take a few seconds)."
+              : "Checkout cancelled — no charge was made."}
+          </span>
+          <button
+            type="button"
+            className="checkout-banner__close"
+            aria-label="Dismiss"
+            onClick={() => setCheckoutBanner(null)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <Notices />
 
