@@ -12,6 +12,7 @@ import {
   SignUpPage,
 } from "./features/auth/AuthPages";
 import { OAuthPopupCallback } from "./features/auth/OAuthPopupCallback";
+import { PrivacyPage, TermsPage } from "./features/legal/LegalPages";
 import "./app/styles.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -26,6 +27,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
             <Route path="/auth/popup-callback" element={<OAuthPopupCallback />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
             {/* The editor is intentionally NOT auth-protected — anonymous
                 users can build a full project; only export is gated. */}
             <Route path="*" element={<App />} />
