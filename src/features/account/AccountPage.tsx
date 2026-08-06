@@ -17,7 +17,7 @@ import {
 import { formatDuration } from "../../utils/format";
 
 export function AccountPage() {
-  const { auth, updatePassword, signOut } = useAuth();
+  const { auth, updatePassword, signOut, reloadProfile } = useAuth();
   const { accountPlan } = usePlan();
   const navigate = useNavigate();
 
@@ -58,6 +58,18 @@ export function AccountPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  /** Upgrade from the account page. Checkout runs in a popup (this tab stays
+   * put); on success we poll the profile so the plan updates in place. */
+  async function upgrade(plan: "creator" | "professional") {
+    const outcome = await startCheckout(plan);
+    if (outcome !== "success") return;
+    for (const ms of [0, 1500, 3000, 5000]) {
+      if (ms) await new Promise((r) => setTimeout(r, ms));
+      await reloadProfile();
+    }
+    setNotice("Your plan is active.");
   }
 
   async function onChangePassword(e: React.FormEvent) {
@@ -161,7 +173,7 @@ export function AccountPage() {
                   disabled={busy !== null}
                   onClick={() =>
                     run(`up-${p}`, () =>
-                      startCheckout(p as "creator" | "professional"),
+                      upgrade(p as "creator" | "professional"),
                     )
                   }
                 >

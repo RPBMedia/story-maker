@@ -26,13 +26,14 @@ import {
 export function ExportStage() {
   const { state, dispatch, timeline, soundtrackDuration, isValid } =
     useProject();
-  const { auth } = useAuth();
+  const { auth, reloadProfile } = useAuth();
   const { entitlements, isGod } = usePlan();
   const [detailOpen, setDetailOpen] = useState(false);
   const [upgradeBusy, setUpgradeBusy] = useState<
     "creator" | "professional" | null
   >(null);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
@@ -129,9 +130,27 @@ export function ExportStage() {
 
   async function beginUpgrade(plan: "creator" | "professional") {
     setUpgradeError(null);
+    setUpgradeNotice(null);
     setUpgradeBusy(plan);
     try {
-      await startCheckout(plan); // redirects to Stripe on success
+      // Checkout runs in a popup, so this tab (and the in-progress project)
+      // stays alive and resolves with the outcome when the popup closes.
+      const outcome = await startCheckout(plan);
+      if (outcome === "redirect") return; // popup blocked → navigating away
+      if (outcome === "cancelled") {
+        setUpgradeBusy(null);
+        return;
+      }
+      // Paid. The webhook grants the plan server-side; poll the profile until
+      // it lands, then the export unlocks right here — no lost work.
+      analytics.track("checkout_succeeded", { plan });
+      setUpgradeNotice("Payment received — unlocking your plan…");
+      for (const ms of [0, 1500, 3000, 5000]) {
+        if (ms) await new Promise((r) => setTimeout(r, ms));
+        await reloadProfile();
+      }
+      setUpgradeBusy(null);
+      setUpgradeNotice("You're all set — your plan is active. You can export now.");
     } catch (e) {
       setUpgradeBusy(null);
       setUpgradeError(
@@ -329,6 +348,11 @@ export function ExportStage() {
                 {upgradeError && (
                   <p className="warning-inline" role="alert">
                     {upgradeError}
+                  </p>
+                )}
+                {upgradeNotice && (
+                  <p className="upgrade-notice__status" role="status">
+                    {upgradeNotice}
                   </p>
                 )}
                 <p className="upgrade-notice__hint">

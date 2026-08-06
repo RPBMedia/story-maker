@@ -67,8 +67,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       allow_promotion_codes: true,
       client_reference_id: user.id,
       subscription_data: { metadata: { supabase_user_id: user.id, plan } },
-      success_url: `${base}/?checkout=success`,
-      cancel_url: `${base}/?checkout=cancelled`,
+      success_url: `${base}/checkout/return?status=success`,
+      cancel_url: `${base}/checkout/return?status=cancelled`,
     });
 
     return res.status(200).json({ url: session.url });

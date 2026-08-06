@@ -30,6 +30,9 @@ export type AnalyticsEvent =
   | "export_failed"
   | "render_time_estimate_viewed"
   | "render_cancelled"
+  // Billing
+  | "checkout_succeeded"
+  | "checkout_cancelled"
   // Effects
   | "transition_enabled"
   | "zoom_enabled";

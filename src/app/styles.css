@@ -1703,6 +1703,13 @@ input[type="range"] {
   color: var(--text-dim);
 }
 
+.upgrade-notice__status {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent, #7c6cff);
+}
+
 /* God-mode plan switcher inside the account menu */
 .account__plan-note {
   padding: 6px 10px;
