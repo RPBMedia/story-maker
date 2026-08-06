@@ -7,6 +7,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { stripe, supabaseAdmin, requireUser, appUrl } from "./_lib/server.js";
 
+/** True when Stripe reports the customer doesn't exist under the current key —
+ * e.g. a customer id created in test mode is used with a live key after go-live. */
+function isMissingCustomer(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  return e?.code === "resource_missing" || /no such customer/i.test(e?.message ?? "");
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -29,11 +36,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ error: "No subscription found for this account yet." });
     }
 
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: appUrl(req),
-    });
-    return res.status(200).json({ url: session.url });
+    try {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: appUrl(req),
+      });
+      return res.status(200).json({ url: session.url });
+    } catch (err) {
+      if (!isMissingCustomer(err)) throw err;
+      // The stored customer doesn't exist under the live key (test-mode residue
+      // from before go-live). There's no live subscription, so self-heal the row
+      // back to a clean free state and tell the user plainly.
+      await admin
+        .from("profiles")
+        .update({
+          plan: "free",
+          stripe_customer_id: null,
+          stripe_subscription_id: null,
+          subscription_status: null,
+          current_period_end: null,
+        })
+        .eq("id", user.id);
+      return res.status(400).json({
+        error:
+          "We couldn't find an active subscription for this account. Your plan has been reset to Free — you can subscribe again anytime.",
+      });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "error";
     if (message === "unauthorized") {
