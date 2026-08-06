@@ -108,11 +108,31 @@ async function applySubscription(
   };
 
   const admin = supabaseAdmin();
-  // Prefer the user id (from checkout/subscription metadata); fall back to the
-  // Stripe customer id we stored at checkout.
-  const query = admin.from("profiles").update(fields);
-  const { error } = userId
-    ? await query.eq("id", userId)
-    : await query.eq("stripe_customer_id", customerId);
+  // Prefer the user id (from checkout/subscription metadata). We UPSERT rather
+  // than UPDATE: a plain update silently matches zero rows if the profile row
+  // is missing (e.g. the signup trigger never ran for this user), which would
+  // leave a paying customer on the free plan while the webhook still returns
+  // 200. Upserting by primary key creates-or-updates, so the grant always lands.
+  if (userId) {
+    const { error } = await admin
+      .from("profiles")
+      .upsert({ id: userId, ...fields }, { onConflict: "id" });
+    if (error) throw new Error(`profiles upsert failed: ${error.message}`);
+    return;
+  }
+
+  // No user id on the event — fall back to the Stripe customer id we stored at
+  // checkout. We can't create a row without the auth user id, so require a
+  // match and fail loudly (500 → Stripe retries) instead of a silent no-op.
+  const { data, error } = await admin
+    .from("profiles")
+    .update(fields)
+    .eq("stripe_customer_id", customerId)
+    .select("id");
   if (error) throw new Error(`profiles update failed: ${error.message}`);
+  if (!data || data.length === 0) {
+    throw new Error(
+      `no profile matched customer ${customerId} and no user id on event`,
+    );
+  }
 }

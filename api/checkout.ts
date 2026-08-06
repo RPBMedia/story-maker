@@ -43,10 +43,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         metadata: { supabase_user_id: user.id },
       });
       customerId = customer.id;
+      // Upsert (not update): if the signup trigger never created this user's
+      // row, a plain update would no-op and we'd lose the customer id, which in
+      // turn breaks the webhook's customer-id fallback. Upsert guarantees the
+      // row exists and carries the customer id.
       await admin
         .from("profiles")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", user.id);
+        .upsert(
+          {
+            id: user.id,
+            email: user.email ?? profile?.email ?? null,
+            stripe_customer_id: customerId,
+          },
+          { onConflict: "id" },
+        );
     }
 
     const base = appUrl(req);
