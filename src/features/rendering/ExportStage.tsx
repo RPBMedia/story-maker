@@ -13,7 +13,8 @@ import {
   RenderCancelledError,
   RenderFailedError,
 } from "../../services/rendering/RenderingService";
-import { RENDER_STAGE_LABELS } from "../../types";
+import { RENDER_STAGE_LABELS, DEFAULT_RENDER_SETTINGS } from "../../types";
+import { aspectPresets, aspectOf } from "../../services/aspect";
 import { formatBytes, formatDuration } from "../../utils/format";
 import { RenderTimeInfo } from "../../components/RenderTimeInfo";
 import {
@@ -54,6 +55,32 @@ export function ExportStage() {
           ),
         )
       : null;
+
+  const aspects = aspectPresets(entitlements.maxResolution);
+  const currentAspect = aspectOf(state.settings);
+
+  // One-time default: if the user hasn't picked an aspect (settings still at the
+  // bare default) and their plan allows a higher resolution, adopt the plan's
+  // landscape preset so paid plans export at full quality by default. Never
+  // overrides a manual choice — it only fires once, and only when untouched.
+  const aspectSyncedRef = useRef(false);
+  useEffect(() => {
+    if (aspectSyncedRef.current) return;
+    const s = state.settings;
+    const untouched =
+      s.width === DEFAULT_RENDER_SETTINGS.width &&
+      s.height === DEFAULT_RENDER_SETTINGS.height;
+    if (untouched) {
+      const landscape = aspects[0];
+      if (landscape.width !== s.width || landscape.height !== s.height) {
+        dispatch({
+          type: "set-render-settings",
+          settings: { width: landscape.width, height: landscape.height },
+        });
+      }
+    }
+    aspectSyncedRef.current = true;
+  }, [aspects, state.settings, dispatch]);
 
   // elapsed-time ticker
   useEffect(() => {
@@ -236,6 +263,48 @@ export function ExportStage() {
       {!rendering && !result && (
         <>
           <RenderTimeInfo estimate={estimate} />
+
+          <div className="card export-format">
+            <h3 className="section-title">Format</h3>
+            <p className="stage-sub">
+              Choose the shape for where you'll share it — the video renders to
+              this frame.
+            </p>
+            <div
+              className="aspect-options"
+              role="radiogroup"
+              aria-label="Output aspect ratio"
+            >
+              {aspects.map((a) => {
+                const active = currentAspect === a.id;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`aspect-option${active ? " aspect-option--active" : ""}`}
+                    onClick={() =>
+                      dispatch({
+                        type: "set-render-settings",
+                        settings: { width: a.width, height: a.height },
+                      })
+                    }
+                  >
+                    <span
+                      className={`aspect-swatch aspect-swatch--${a.id.replace(":", "-")}`}
+                      aria-hidden="true"
+                    />
+                    <span className="aspect-option__label">{a.label}</span>
+                    <span className="aspect-option__hint">{a.hint}</span>
+                    <span className="aspect-option__dims">
+                      {a.width}×{a.height}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {timeline.segments.length > 0 && (
             <div className="card export-summary">

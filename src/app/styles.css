@@ -2034,3 +2034,68 @@ input[type="range"] {
 .field-input:focus-visible {
   outline: 2px solid var(--accent);
 }
+
+/* Export → Format: aspect-ratio presets (16:9 / 9:16 / 1:1). */
+.aspect-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.aspect-option {
+  flex: 1 1 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.aspect-option:hover {
+  border-color: var(--accent);
+}
+.aspect-option--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+}
+.aspect-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.aspect-swatch {
+  display: block;
+  border: 2px solid var(--accent-ink);
+  border-radius: 3px;
+  margin-bottom: 2px;
+}
+.aspect-swatch--16-9 {
+  width: 44px;
+  height: 25px;
+}
+.aspect-swatch--9-16 {
+  width: 25px;
+  height: 44px;
+}
+.aspect-swatch--1-1 {
+  width: 34px;
+  height: 34px;
+}
+.aspect-option__label {
+  font-weight: 600;
+}
+.aspect-option__hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.25;
+}
+.aspect-option__dims {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}

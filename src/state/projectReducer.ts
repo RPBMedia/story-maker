@@ -92,6 +92,7 @@ export type ProjectAction =
   | { type: "set-project-zoom"; zoom: ZoomEffectSettings }
   | { type: "set-item-transition"; id: string; transition: TransitionSettings | null }
   | { type: "set-item-zoom"; id: string; zoom: ZoomEffectSettings | null }
+  | { type: "set-render-settings"; settings: Partial<RenderSettings> }
   | { type: "confirm-export" }
   | { type: "add-notices"; notices: string[] }
   | { type: "dismiss-notices" }
@@ -259,6 +260,9 @@ export function projectReducer(
           },
         },
       };
+
+    case "set-render-settings":
+      return { ...state, settings: { ...state.settings, ...action.settings } };
 
     case "confirm-export":
       return { ...state, exportConfirmed: true };
