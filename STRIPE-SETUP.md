@@ -63,13 +63,13 @@ Project → **Settings → Environment Variables** (Production **and** Preview):
 | `STRIPE_PRICE_PRO` | `price_...` (Pro) |
 | `SUPABASE_URL` | `https://ccxxachnmntbvaichioa.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | the `service_role` secret |
-| `APP_URL` | `https://story-maker-main.vercel.app` |
+| `APP_URL` | `https://story-maker.app` |
 | `STRIPE_WEBHOOK_SECRET` | *(fill in after step 6)* |
 
 ## 6. Stripe — create the webhook
 
 **Developers → Webhooks → Add endpoint**:
-- **Endpoint URL:** `https://story-maker-main.vercel.app/api/webhook`
+- **Endpoint URL:** `https://story-maker.app/api/webhook`
 - **Events to send:**
   - `checkout.session.completed`
   - `customer.subscription.created`

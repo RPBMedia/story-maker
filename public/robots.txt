@@ -4,4 +4,4 @@ Disallow: /account
 Disallow: /checkout/return
 Disallow: /auth/popup-callback
 
-Sitemap: https://story-maker-main.vercel.app/sitemap.xml
+Sitemap: https://story-maker.app/sitemap.xml

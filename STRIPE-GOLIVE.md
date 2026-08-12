@@ -74,7 +74,7 @@ goes straight into Vercel.
 - **API version:** keep the default `2020-08-27` (matches the code)
 - **Endpoint URL:**
   ```
-  https://story-maker-main.vercel.app/api/webhook
+  https://story-maker.app/api/webhook
   ```
 - **Events (the same four):**
   - `checkout.session.completed`
