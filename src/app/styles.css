@@ -2099,3 +2099,42 @@ input[type="range"] {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* Title & end cards panel. */
+.card-editor {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.card-editor:first-of-type {
+  border-top: none;
+}
+.card-enable {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.card-enable input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.paid-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.segmented__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

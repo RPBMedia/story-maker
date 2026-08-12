@@ -222,3 +222,80 @@ function emptyTimeline(): EffectiveTimeline {
     endFade: 0,
   };
 }
+
+/** A resolved title/end card ready to place on the timeline. */
+export interface CardTimelineInput {
+  item: VisualMediaItem;
+  role: "title" | "end";
+  durationSeconds: number;
+  fade: boolean;
+  zoom: ZoomEffectSettings;
+}
+
+/**
+ * Compose title/end cards as fixed-duration segments INSIDE the soundtrack.
+ * Media is allocated to (soundtrack − reserved card time) by the untouched
+ * {@link buildTimeline}, then shifted so the title leads and the end trails —
+ * so the output length still equals the music exactly. Media cross-fades are
+ * preserved (boundary indices just shift by one when a title card leads).
+ */
+export function buildTimelineWithCards(
+  input: TimelineInput,
+  cards: { title?: CardTimelineInput; end?: CardTimelineInput },
+): EffectiveTimeline {
+  const titleDur = cards.title ? Math.max(0, cards.title.durationSeconds) : 0;
+  const endDur = cards.end ? Math.max(0, cards.end.durationSeconds) : 0;
+  const reserved = titleDur + endDur;
+  if (reserved <= 0) return buildTimeline(input);
+
+  const mediaWindow = Math.max(0, round(input.soundtrackDuration - reserved));
+  const media = buildTimeline({ ...input, soundtrackDuration: mediaWindow });
+
+  const shiftedMedia: TimelineSegment[] = media.segments.map((s) => ({
+    ...s,
+    start: round(s.start + titleDur),
+    end: round(s.end + titleDur),
+  }));
+
+  const segments: TimelineSegment[] = [];
+  if (cards.title) {
+    segments.push({
+      item: cards.title.item,
+      duration: titleDur,
+      start: 0,
+      end: round(titleDur),
+      zoom: cards.title.zoom,
+      card: { role: "title", fade: cards.title.fade },
+    });
+  }
+  segments.push(...shiftedMedia);
+  if (cards.end) {
+    const startAt = segments.length ? segments[segments.length - 1].end : round(titleDur);
+    segments.push({
+      item: cards.end.item,
+      duration: endDur,
+      start: startAt,
+      end: round(startAt + endDur),
+      zoom: cards.end.zoom,
+      card: { role: "end", fade: cards.end.fade },
+    });
+  }
+
+  const boundaryShift = cards.title ? 1 : 0;
+  const boundaries: TransitionBoundary[] = media.boundaries.map((b) => ({
+    ...b,
+    afterIndex: b.afterIndex + boundaryShift,
+  }));
+
+  return {
+    segments,
+    boundaries,
+    totalOverlap: media.totalOverlap,
+    total: round(input.soundtrackDuration),
+    freezeTail: media.freezeTail,
+    trimmed: media.trimmed,
+    anyClamped: media.anyClamped,
+    // The end card owns the closing fade; media's own endFade no longer applies.
+    endFade: cards.end ? 0 : media.endFade,
+  };
+}

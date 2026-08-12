@@ -36,6 +36,7 @@ import type {
 import {
   buildXfadeGraph,
   fadeOutChain,
+  fadeInChain,
   needsXfadePath,
   scalePadChain,
   zoomChain,
@@ -198,12 +199,26 @@ export class RenderingService {
       const out = `seg_${i}.mp4`;
       const isLast = i === plan.segments.length - 1;
       // End-of-video dip to black on the final segment (cross-fade option on).
-      const endFade = isLast ? fadeOutChain(timeline.endFade, seg.duration, settings.fps) : null;
+      // Skip it for a card — the card supplies its own fade below.
+      const endFade =
+        isLast && !seg.card
+          ? fadeOutChain(timeline.endFade, seg.duration, settings.fps)
+          : null;
+      // Title/end card fade from/to black (a card polish, any plan).
+      const cardFade = seg.card?.fade ? Math.min(0.8, seg.duration / 2) : 0;
+      const cardFadeIn =
+        seg.card?.role === "title" && cardFade > 0 ? fadeInChain(cardFade) : null;
+      const cardFadeOut =
+        seg.card?.role === "end" && cardFade > 0
+          ? fadeOutChain(cardFade, seg.duration, settings.fps)
+          : null;
 
       if (seg.item.kind === "image") {
         const zoom = zoomChain(seg.zoom, seg.duration, settings, "image");
         const stage = zoom ? w.zoom : w.images;
         let vf = zoom ? `${scalePad},${zoom}` : scalePad;
+        if (cardFadeIn) vf = `${vf},${cardFadeIn}`;
+        if (cardFadeOut) vf = `${vf},${cardFadeOut}`;
         if (endFade) vf = `${vf},${endFade}`;
         devLogSegment(i, seg, vf);
         // With zoom the still is animated from ONE input frame (zoompan d=N),

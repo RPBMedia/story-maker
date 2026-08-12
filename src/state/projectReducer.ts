@@ -1,5 +1,6 @@
 import type {
   AudioTrack,
+  CardSettings,
   OrderingMode,
   RenderError,
   RenderProgress,
@@ -12,7 +13,9 @@ import type {
   ZoomEffectSettings,
 } from "../types";
 import {
+  DEFAULT_END_CARD,
   DEFAULT_RENDER_SETTINGS,
+  DEFAULT_TITLE_CARD,
   DEFAULT_TRANSITION,
   DEFAULT_ZOOM,
 } from "../types";
@@ -43,6 +46,9 @@ export interface ProjectState {
    * there is nothing to undo (e.g. after a manual drag or an upload). */
   orderSnapshot: OrderSnapshot | null;
   settings: RenderSettings;
+  /** Auto-generated intro/outro cards (disabled by default). */
+  titleCard: CardSettings;
+  endCard: CardSettings;
   /** Project-wide effect defaults; items may override (null = inherit). */
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
@@ -65,6 +71,8 @@ export const initialProjectState: ProjectState = {
   orderingMode: "manual",
   orderSnapshot: null,
   settings: DEFAULT_RENDER_SETTINGS,
+  titleCard: DEFAULT_TITLE_CARD,
+  endCard: DEFAULT_END_CARD,
   projectTransition: DEFAULT_TRANSITION,
   projectZoom: DEFAULT_ZOOM,
   effectOverrides: {},
@@ -93,6 +101,8 @@ export type ProjectAction =
   | { type: "set-item-transition"; id: string; transition: TransitionSettings | null }
   | { type: "set-item-zoom"; id: string; zoom: ZoomEffectSettings | null }
   | { type: "set-render-settings"; settings: Partial<RenderSettings> }
+  | { type: "set-title-card"; card: Partial<CardSettings> }
+  | { type: "set-end-card"; card: Partial<CardSettings> }
   /** Rehydrate the authoring state from local (IndexedDB) persistence. */
   | {
       type: "restore-project";
@@ -103,6 +113,8 @@ export type ProjectAction =
         | "visualItems"
         | "orderingMode"
         | "settings"
+        | "titleCard"
+        | "endCard"
         | "projectTransition"
         | "projectZoom"
         | "effectOverrides"
@@ -278,6 +290,20 @@ export function projectReducer(
 
     case "set-render-settings":
       return { ...state, settings: { ...state.settings, ...action.settings } };
+
+    case "set-title-card":
+      return {
+        ...state,
+        titleCard: { ...state.titleCard, ...action.card },
+        exportConfirmed: false,
+      };
+
+    case "set-end-card":
+      return {
+        ...state,
+        endCard: { ...state.endCard, ...action.card },
+        exportConfirmed: false,
+      };
 
     case "restore-project":
       // Replace authoring fields; transient runtime state stays at its defaults.

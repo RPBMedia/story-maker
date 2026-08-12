@@ -13,6 +13,7 @@
  */
 import type {
   AudioTrack,
+  CardSettings,
   ImageMediaItem,
   OrderingMode,
   RenderSettings,
@@ -22,6 +23,7 @@ import type {
   VisualMediaItem,
   ZoomEffectSettings,
 } from "../types";
+import { DEFAULT_END_CARD, DEFAULT_TITLE_CARD } from "../types";
 import type { StageId } from "../state/projectReducer";
 
 const DB_NAME = "storymaker";
@@ -39,6 +41,8 @@ export interface RestoredProject {
   visualItems: VisualMediaItem[];
   orderingMode: OrderingMode;
   settings: RenderSettings;
+  titleCard: CardSettings;
+  endCard: CardSettings;
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
   effectOverrides: Record<string, VisualEffectOverrides | undefined>;
@@ -68,6 +72,8 @@ interface PersistedProject {
   stage: StageId;
   orderingMode: OrderingMode;
   settings: RenderSettings;
+  titleCard: CardSettings;
+  endCard: CardSettings;
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
   effectOverrides: Record<string, VisualEffectOverrides | undefined>;
@@ -119,6 +125,8 @@ export function toPersisted(state: RestoredProject): {
       stage: state.stage,
       orderingMode: state.orderingMode,
       settings: state.settings,
+      titleCard: state.titleCard,
+      endCard: state.endCard,
       projectTransition: state.projectTransition,
       projectZoom: state.projectZoom,
       effectOverrides: state.effectOverrides,
@@ -168,6 +176,8 @@ export function fromPersisted(
     visualItems,
     orderingMode: snapshot.orderingMode,
     settings: snapshot.settings,
+    titleCard: snapshot.titleCard ?? DEFAULT_TITLE_CARD,
+    endCard: snapshot.endCard ?? DEFAULT_END_CARD,
     projectTransition: snapshot.projectTransition,
     projectZoom: snapshot.projectZoom,
     effectOverrides: snapshot.effectOverrides,

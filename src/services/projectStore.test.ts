@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { toPersisted, fromPersisted, hasSavedProject, type RestoredProject } from "./projectStore";
 import {
+  DEFAULT_END_CARD,
   DEFAULT_RENDER_SETTINGS,
+  DEFAULT_TITLE_CARD,
   DEFAULT_TRANSITION,
   DEFAULT_ZOOM,
   type AudioTrack,
@@ -31,6 +33,8 @@ function makeState(): RestoredProject {
     visualItems: [image, video],
     orderingMode: "date-asc",
     settings: { ...DEFAULT_RENDER_SETTINGS, width: 1080, height: 1920 },
+    titleCard: DEFAULT_TITLE_CARD,
+    endCard: DEFAULT_END_CARD,
     projectTransition: DEFAULT_TRANSITION,
     projectZoom: DEFAULT_ZOOM,
     effectOverrides: { v1: { transition: null, zoom: null } },

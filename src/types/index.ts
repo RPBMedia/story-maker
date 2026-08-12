@@ -218,6 +218,46 @@ export interface VisualEffectOverrides {
   zoom?: ZoomEffectSettings | null;
 }
 
+// ---- title / end cards ------------------------------------------------------
+
+/** An auto-generated intro (title) or outro (end) card. It renders as a
+ * fixed-duration segment *inside* the soundtrack, so the output length always
+ * equals the music; the media clips share whatever time the cards don't use. */
+export interface CardSettings {
+  enabled: boolean;
+  text: string;
+  /** How long the card holds, in seconds (see {@link CARD_LIMITS}). */
+  durationSeconds: number;
+  /** Fade the card in (title) / out (end) from black. Available on every plan. */
+  fade: boolean;
+  /** Slow push in/out on the card. Reuses the standard zoom effect and is a
+   * PAID capability (coerced to "none" for Free plans). */
+  zoom: ZoomEffectType;
+}
+
+export const CARD_LIMITS = {
+  minSeconds: 2,
+  maxSeconds: 10,
+  step: 0.5,
+  default: 3,
+} as const;
+
+export const DEFAULT_TITLE_CARD: CardSettings = {
+  enabled: false,
+  text: "",
+  durationSeconds: CARD_LIMITS.default,
+  fade: true,
+  zoom: "none",
+};
+
+export const DEFAULT_END_CARD: CardSettings = {
+  enabled: false,
+  text: "",
+  durationSeconds: CARD_LIMITS.default,
+  fade: true,
+  zoom: "none",
+};
+
 // ---- effect-aware timeline --------------------------------------------------
 
 /** One boundary between segment i and i+1 (the transition AFTER item i). */
@@ -242,6 +282,9 @@ export interface TimelineSegment {
   end: number;
   /** Resolved zoom effect for this item. */
   zoom: ZoomEffectSettings;
+  /** Present when this segment is an auto-generated title/end card; drives the
+   * fade-from-black render step. Absent for normal media segments. */
+  card?: { role: "title" | "end"; fade: boolean };
 }
 
 export interface EffectiveTimeline {
@@ -301,6 +344,9 @@ export interface PlanEntitlements {
   watermark: boolean;
   /** Cross-fades / zoom effects available. */
   effects: boolean;
+  /** Zoom (push in/out) on title & end cards — a paid-only card polish. Free
+   * plans can still add cards and fade them, just without zoom. */
+  titleCardZoom: boolean;
   /** Exports allowed per month; null = unlimited. */
   exportQuotaPerMonth: number | null;
   /** Fast/priority server-side rendering (vs in-browser). */

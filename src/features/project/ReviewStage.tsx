@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useProject } from "../../state/ProjectContext";
 import { formatBytes, formatDuration, formatSeconds } from "../../utils/format";
 import { EffectsPanel } from "./EffectsPanel";
+import { CardsPanel } from "./CardsPanel";
 import { RenderTimeInfo } from "../../components/RenderTimeInfo";
 import {
   estimateInputFromTimeline,
@@ -134,6 +135,8 @@ export function ReviewStage({ onGenerate }: { onGenerate: () => void }) {
       </dl>
 
       <EffectsPanel />
+
+      <CardsPanel />
 
       {timeline.segments.length > 0 && (
         <>

@@ -23,6 +23,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, PlanEntitlements> = {
     maxFps: 30,
     watermark: true,
     effects: true, // basic effects allowed
+    titleCardZoom: false, // card zoom is a paid polish
     exportQuotaPerMonth: 5,
     serverRendering: false,
     storageBytes: null,
@@ -37,6 +38,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, PlanEntitlements> = {
     maxFps: 30,
     watermark: false,
     effects: true,
+    titleCardZoom: true,
     exportQuotaPerMonth: 50,
     serverRendering: true,
     storageBytes: null,
@@ -51,6 +53,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, PlanEntitlements> = {
     maxFps: 60,
     watermark: false,
     effects: true,
+    titleCardZoom: true,
     exportQuotaPerMonth: null, // unlimited
     serverRendering: true, // priority
     storageBytes: null,

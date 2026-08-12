@@ -133,6 +133,15 @@ export function fadeOutChain(
   return `fade=t=out:st=${st.toFixed(3)}:d=${d.toFixed(3)}:color=black`;
 }
 
+/**
+ * Fade a segment IN from black over its opening — used on a title card so it
+ * eases in rather than hard-cutting. Returns null when there is nothing to do.
+ */
+export function fadeInChain(fadeSeconds: number): string | null {
+  if (fadeSeconds <= 0) return null;
+  return `fade=t=in:st=0:d=${fadeSeconds.toFixed(3)}:color=black`;
+}
+
 export interface XfadeGraph {
   /** Full -filter_complex value. */
   filter: string;

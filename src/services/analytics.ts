@@ -35,7 +35,8 @@ export type AnalyticsEvent =
   | "checkout_cancelled"
   // Effects
   | "transition_enabled"
-  | "zoom_enabled";
+  | "zoom_enabled"
+  | "card_enabled";
 
 export type AnalyticsProps = Record<string, string | number | boolean>;
 
