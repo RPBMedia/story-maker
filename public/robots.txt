@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /account
+Disallow: /checkout/return
+Disallow: /auth/popup-callback
+
+Sitemap: https://story-maker-main.vercel.app/sitemap.xml

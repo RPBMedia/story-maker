@@ -3,8 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/storymaker-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StoryMaker — turn audio and media into a video story</title>
+    <meta name="theme-color" content="#0a0d13" />
+
+    <!-- Primary SEO. Canonical/OG URLs use the current production origin; update
+         these to the custom domain when it is registered (domain task). -->
+    <title>StoryMaker — turn your audio and media into a video story</title>
+    <meta
+      name="description"
+      content="StoryMaker turns your audio and media into a shareable video story in minutes — add clips and photos, sync to your track, and export ready for social."
+    />
+    <link rel="canonical" href="https://story-maker-main.vercel.app/" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="StoryMaker" />
+    <meta property="og:title" content="StoryMaker — turn your audio and media into a video story" />
+    <meta
+      property="og:description"
+      content="Add your clips and photos, sync them to your audio, and export a shareable video story in minutes."
+    />
+    <meta property="og:url" content="https://story-maker-main.vercel.app/" />
+    <meta property="og:image" content="https://story-maker-main.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="StoryMaker — turn your audio and media into a video story" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="StoryMaker — turn your audio and media into a video story" />
+    <meta
+      name="twitter:description"
+      content="Add your clips and photos, sync them to your audio, and export a shareable video story in minutes."
+    />
+    <meta name="twitter:image" content="https://story-maker-main.vercel.app/og-image.png" />
+
+    <!-- Structured data: helps search engines classify the app. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "StoryMaker",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Web",
+        "url": "https://story-maker-main.vercel.app/",
+        "description": "StoryMaker turns your audio and media into a shareable video story in minutes.",
+        "offers": [
+          { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Creator", "price": "5", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Pro", "price": "15", "priceCurrency": "USD" }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
