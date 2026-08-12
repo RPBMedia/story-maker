@@ -1,8 +1,10 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useReducer,
+  useRef,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -15,6 +17,7 @@ import {
   type ProjectState,
 } from "./projectReducer";
 import { buildTimeline } from "../utils/timeline";
+import { loadProject, saveProject } from "../services/projectStore";
 import type { EffectiveTimeline } from "../types";
 
 interface ProjectContextValue {
@@ -31,6 +34,52 @@ const ProjectContext = createContext<ProjectContextValue | null>(null);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(projectReducer, initialProjectState);
+  // Gate autosave until the initial restore has settled, so we never clobber a
+  // saved project by persisting the empty initial state during load.
+  const restoredRef = useRef(false);
+
+  // Restore any locally-saved project once, on mount.
+  useEffect(() => {
+    let cancelled = false;
+    loadProject()
+      .then((snap) => {
+        if (!cancelled && snap) dispatch({ type: "restore-project", project: snap });
+      })
+      .finally(() => {
+        if (!cancelled) restoredRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Autosave the authoring state (debounced) whenever it changes. Big media
+  // blobs are written once; edits only rewrite the tiny metadata snapshot.
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    const id = window.setTimeout(() => {
+      void saveProject({
+        stage: state.stage,
+        audioTracks: state.audioTracks,
+        visualItems: state.visualItems,
+        orderingMode: state.orderingMode,
+        settings: state.settings,
+        projectTransition: state.projectTransition,
+        projectZoom: state.projectZoom,
+        effectOverrides: state.effectOverrides,
+      });
+    }, 700);
+    return () => window.clearTimeout(id);
+  }, [
+    state.stage,
+    state.audioTracks,
+    state.visualItems,
+    state.orderingMode,
+    state.settings,
+    state.projectTransition,
+    state.projectZoom,
+    state.effectOverrides,
+  ]);
 
   const value = useMemo<ProjectContextValue>(() => {
     const duration = soundtrackDuration(state);

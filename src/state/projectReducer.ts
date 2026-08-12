@@ -93,6 +93,21 @@ export type ProjectAction =
   | { type: "set-item-transition"; id: string; transition: TransitionSettings | null }
   | { type: "set-item-zoom"; id: string; zoom: ZoomEffectSettings | null }
   | { type: "set-render-settings"; settings: Partial<RenderSettings> }
+  /** Rehydrate the authoring state from local (IndexedDB) persistence. */
+  | {
+      type: "restore-project";
+      project: Pick<
+        ProjectState,
+        | "stage"
+        | "audioTracks"
+        | "visualItems"
+        | "orderingMode"
+        | "settings"
+        | "projectTransition"
+        | "projectZoom"
+        | "effectOverrides"
+      >;
+    }
   | { type: "confirm-export" }
   | { type: "add-notices"; notices: string[] }
   | { type: "dismiss-notices" }
@@ -263,6 +278,10 @@ export function projectReducer(
 
     case "set-render-settings":
       return { ...state, settings: { ...state.settings, ...action.settings } };
+
+    case "restore-project":
+      // Replace authoring fields; transient runtime state stays at its defaults.
+      return { ...initialProjectState, ...action.project };
 
     case "confirm-export":
       return { ...state, exportConfirmed: true };
