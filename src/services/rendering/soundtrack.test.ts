@@ -31,6 +31,20 @@ describe("buildSoundtrackFilter", () => {
         "[axf1][2:a]acrossfade=d=2.000:c1=tri:c2=tri[out]",
     );
   });
+
+  it("appends soundtrack fade in/out when requested", () => {
+    const f = buildSoundtrackFilter(1, 0, { durationSeconds: 1.5, totalSeconds: 30 });
+    expect(f).toBe(
+      "[0:a]anull[sfmix];[sfmix]afade=t=in:st=0:d=1.500," +
+        "afade=t=out:st=28.500:d=1.500[out]",
+    );
+  });
+
+  it("clamps the fade to half the soundtrack for very short tracks", () => {
+    const f = buildSoundtrackFilter(1, 0, { durationSeconds: 3, totalSeconds: 4 });
+    expect(f).toContain("afade=t=in:st=0:d=2.000");
+    expect(f).toContain("afade=t=out:st=2.000:d=2.000");
+  });
 });
 
 function track(duration: number): AudioTrack {

@@ -7,7 +7,7 @@ import { useDragReorder } from "../../hooks/useDragReorder";
 import { probeAV } from "../../services/metadata";
 import { classifyFile, isDuplicate } from "../../utils/validation";
 import { formatBytes, formatDuration } from "../../utils/format";
-import { AUDIO_CROSSFADE_LIMITS } from "../../types";
+import { AUDIO_CROSSFADE_LIMITS, AUDIO_FADE_LIMITS } from "../../types";
 import type { AudioTrack } from "../../types";
 
 export function SoundtrackStage() {
@@ -199,6 +199,50 @@ export function SoundtrackStage() {
               <p className="effects-hint">
                 Each track dissolves into the next. This overlaps the tracks, so
                 the soundtrack (and video) get slightly shorter.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {state.audioTracks.length >= 1 && (
+        <div className="card crossfade-panel">
+          <label className="card-enable">
+            <input
+              type="checkbox"
+              checked={state.audioFade.enabled}
+              onChange={(e) =>
+                dispatch({
+                  type: "set-audio-fade",
+                  fade: { enabled: e.target.checked },
+                })
+              }
+            />
+            <span>Fade music in &amp; out</span>
+          </label>
+          {state.audioFade.enabled && (
+            <div className="effects-field">
+              <label className="effects-label" htmlFor="audiofade-duration">
+                Fade length:{" "}
+                <strong>{state.audioFade.durationSeconds.toFixed(1)}s</strong>
+              </label>
+              <input
+                id="audiofade-duration"
+                type="range"
+                min={AUDIO_FADE_LIMITS.min}
+                max={AUDIO_FADE_LIMITS.max}
+                step={AUDIO_FADE_LIMITS.step}
+                value={state.audioFade.durationSeconds}
+                onChange={(e) =>
+                  dispatch({
+                    type: "set-audio-fade",
+                    fade: { durationSeconds: Number(e.target.value) },
+                  })
+                }
+              />
+              <p className="effects-hint">
+                The soundtrack eases in at the start and out at the end instead
+                of beginning or stopping abruptly.
               </p>
             </div>
           )}

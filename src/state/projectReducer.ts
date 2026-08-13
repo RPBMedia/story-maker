@@ -1,5 +1,6 @@
 import type {
   AudioCrossfadeSettings,
+  AudioFadeSettings,
   AudioTrack,
   CardSettings,
   OrderingMode,
@@ -15,6 +16,7 @@ import type {
 } from "../types";
 import {
   DEFAULT_AUDIO_CROSSFADE,
+  DEFAULT_AUDIO_FADE,
   DEFAULT_END_CARD,
   DEFAULT_RENDER_SETTINGS,
   DEFAULT_TITLE_CARD,
@@ -53,6 +55,8 @@ export interface ProjectState {
   endCard: CardSettings;
   /** Cross-fade between consecutive soundtrack tracks (disabled by default). */
   audioCrossfade: AudioCrossfadeSettings;
+  /** Fade the whole soundtrack in/out (disabled by default). */
+  audioFade: AudioFadeSettings;
   /** Project-wide effect defaults; items may override (null = inherit). */
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
@@ -78,6 +82,7 @@ export const initialProjectState: ProjectState = {
   titleCard: DEFAULT_TITLE_CARD,
   endCard: DEFAULT_END_CARD,
   audioCrossfade: DEFAULT_AUDIO_CROSSFADE,
+  audioFade: DEFAULT_AUDIO_FADE,
   projectTransition: DEFAULT_TRANSITION,
   projectZoom: DEFAULT_ZOOM,
   effectOverrides: {},
@@ -109,6 +114,7 @@ export type ProjectAction =
   | { type: "set-title-card"; card: Partial<CardSettings> }
   | { type: "set-end-card"; card: Partial<CardSettings> }
   | { type: "set-audio-crossfade"; crossfade: Partial<AudioCrossfadeSettings> }
+  | { type: "set-audio-fade"; fade: Partial<AudioFadeSettings> }
   /** Rehydrate the authoring state from local (IndexedDB) persistence. */
   | {
       type: "restore-project";
@@ -122,6 +128,7 @@ export type ProjectAction =
         | "titleCard"
         | "endCard"
         | "audioCrossfade"
+        | "audioFade"
         | "projectTransition"
         | "projectZoom"
         | "effectOverrides"
@@ -332,6 +339,13 @@ export function projectReducer(
       return {
         ...state,
         audioCrossfade: { ...state.audioCrossfade, ...action.crossfade },
+        exportConfirmed: false,
+      };
+
+    case "set-audio-fade":
+      return {
+        ...state,
+        audioFade: { ...state.audioFade, ...action.fade },
         exportConfirmed: false,
       };
 

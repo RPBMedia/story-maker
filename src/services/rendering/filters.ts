@@ -152,23 +152,38 @@ export function fadeInChain(fadeSeconds: number): string | null {
 export function buildSoundtrackFilter(
   trackCount: number,
   crossfadeSeconds: number,
+  fade?: { durationSeconds: number; totalSeconds: number },
 ): string {
-  if (trackCount < 2) return "[0:a]anull[out]";
-  if (crossfadeSeconds <= 0) {
-    return (
+  const wantFade = !!fade && fade.durationSeconds > 0 && fade.totalSeconds > 0;
+  const finalPad = wantFade ? "[sfmix]" : "[out]";
+
+  let base: string;
+  if (trackCount < 2) {
+    base = `[0:a]anull${finalPad}`;
+  } else if (crossfadeSeconds <= 0) {
+    base =
       Array.from({ length: trackCount }, (_, i) => `[${i}:a]`).join("") +
-      `concat=n=${trackCount}:v=0:a=1[out]`
-    );
+      `concat=n=${trackCount}:v=0:a=1${finalPad}`;
+  } else {
+    const d = crossfadeSeconds.toFixed(3);
+    let prev = "[0:a]";
+    const parts: string[] = [];
+    for (let i = 1; i < trackCount; i++) {
+      const out = i === trackCount - 1 ? finalPad : `[axf${i}]`;
+      parts.push(`${prev}[${i}:a]acrossfade=d=${d}:c1=tri:c2=tri${out}`);
+      prev = `[axf${i}]`;
+    }
+    base = parts.join(";");
   }
-  const d = crossfadeSeconds.toFixed(3);
-  let prev = "[0:a]";
-  const parts: string[] = [];
-  for (let i = 1; i < trackCount; i++) {
-    const out = i === trackCount - 1 ? "[out]" : `[axf${i}]`;
-    parts.push(`${prev}[${i}:a]acrossfade=d=${d}:c1=tri:c2=tri${out}`);
-    prev = `[axf${i}]`;
-  }
-  return parts.join(";");
+
+  if (!wantFade) return base;
+  // Fade the mixed soundtrack in at the start and out at the tail.
+  const d = Math.min(fade!.durationSeconds, fade!.totalSeconds / 2);
+  const outStart = Math.max(0, fade!.totalSeconds - d);
+  return (
+    `${base};[sfmix]afade=t=in:st=0:d=${d.toFixed(3)},` +
+    `afade=t=out:st=${outStart.toFixed(3)}:d=${d.toFixed(3)}[out]`
+  );
 }
 
 export interface XfadeGraph {

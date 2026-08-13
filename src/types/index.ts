@@ -280,6 +280,25 @@ export const DEFAULT_AUDIO_CROSSFADE: AudioCrossfadeSettings = {
   durationSeconds: AUDIO_CROSSFADE_LIMITS.default,
 };
 
+/** Gently fade the whole soundtrack in at the start and out at the end, so the
+ * music never begins or ends abruptly. Available on every plan. */
+export interface AudioFadeSettings {
+  enabled: boolean;
+  durationSeconds: number;
+}
+
+export const AUDIO_FADE_LIMITS = {
+  min: 0.5,
+  max: 3,
+  step: 0.5,
+  default: 1.5,
+} as const;
+
+export const DEFAULT_AUDIO_FADE: AudioFadeSettings = {
+  enabled: false,
+  durationSeconds: AUDIO_FADE_LIMITS.default,
+};
+
 // ---- effect-aware timeline --------------------------------------------------
 
 /** One boundary between segment i and i+1 (the transition AFTER item i). */

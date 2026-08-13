@@ -13,6 +13,7 @@
  */
 import type {
   AudioCrossfadeSettings,
+  AudioFadeSettings,
   AudioTrack,
   CardSettings,
   ImageMediaItem,
@@ -26,6 +27,7 @@ import type {
 } from "../types";
 import {
   DEFAULT_AUDIO_CROSSFADE,
+  DEFAULT_AUDIO_FADE,
   DEFAULT_END_CARD,
   DEFAULT_TITLE_CARD,
 } from "../types";
@@ -49,6 +51,7 @@ export interface RestoredProject {
   titleCard: CardSettings;
   endCard: CardSettings;
   audioCrossfade: AudioCrossfadeSettings;
+  audioFade: AudioFadeSettings;
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
   effectOverrides: Record<string, VisualEffectOverrides | undefined>;
@@ -81,6 +84,7 @@ interface PersistedProject {
   titleCard: CardSettings;
   endCard: CardSettings;
   audioCrossfade: AudioCrossfadeSettings;
+  audioFade: AudioFadeSettings;
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
   effectOverrides: Record<string, VisualEffectOverrides | undefined>;
@@ -135,6 +139,7 @@ export function toPersisted(state: RestoredProject): {
       titleCard: state.titleCard,
       endCard: state.endCard,
       audioCrossfade: state.audioCrossfade,
+      audioFade: state.audioFade,
       projectTransition: state.projectTransition,
       projectZoom: state.projectZoom,
       effectOverrides: state.effectOverrides,
@@ -187,6 +192,7 @@ export function fromPersisted(
     titleCard: snapshot.titleCard ?? DEFAULT_TITLE_CARD,
     endCard: snapshot.endCard ?? DEFAULT_END_CARD,
     audioCrossfade: snapshot.audioCrossfade ?? DEFAULT_AUDIO_CROSSFADE,
+    audioFade: snapshot.audioFade ?? DEFAULT_AUDIO_FADE,
     projectTransition: snapshot.projectTransition,
     projectZoom: snapshot.projectZoom,
     effectOverrides: snapshot.effectOverrides,

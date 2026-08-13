@@ -74,6 +74,8 @@ export interface RenderJobInput {
   /** Seconds to cross-fade between consecutive tracks (0 = hard concat).
    * Already clamped below the shortest track. */
   audioCrossfadeSeconds?: number;
+  /** Seconds to fade the whole soundtrack in/out (0 = no fade). */
+  audioFadeSeconds?: number;
   onProgress: (p: RenderProgress) => void;
 }
 
@@ -166,9 +168,13 @@ export class RenderingService {
     // ---- soundtrack
     report(w.audio, 0);
     const inputs = audioNames.flatMap((n) => ["-i", n]);
+    const fadeSeconds = job.audioFadeSeconds ?? 0;
     const soundtrackSpec = buildSoundtrackFilter(
       audioNames.length,
       job.audioCrossfadeSeconds ?? 0,
+      fadeSeconds > 0
+        ? { durationSeconds: fadeSeconds, totalSeconds: soundtrackDuration }
+        : undefined,
     );
     await this.exec(
       [

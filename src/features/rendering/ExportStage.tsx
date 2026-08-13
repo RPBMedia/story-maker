@@ -128,6 +128,7 @@ export function ExportStage() {
         soundtrackDuration,
         settings: state.settings,
         audioCrossfadeSeconds: crossfadePerPairSeconds(state),
+        audioFadeSeconds: state.audioFade.enabled ? state.audioFade.durationSeconds : 0,
         onProgress: (progress) =>
           dispatch({ type: "render-progress", progress }),
       });
