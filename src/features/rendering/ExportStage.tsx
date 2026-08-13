@@ -14,6 +14,7 @@ import {
   RenderFailedError,
 } from "../../services/rendering/RenderingService";
 import { RENDER_STAGE_LABELS, DEFAULT_RENDER_SETTINGS } from "../../types";
+import { crossfadePerPairSeconds } from "../../state/projectReducer";
 import { aspectPresets, aspectOf } from "../../services/aspect";
 import { formatBytes, formatDuration } from "../../utils/format";
 import { RenderTimeInfo } from "../../components/RenderTimeInfo";
@@ -126,6 +127,7 @@ export function ExportStage() {
         timeline,
         soundtrackDuration,
         settings: state.settings,
+        audioCrossfadeSeconds: crossfadePerPairSeconds(state),
         onProgress: (progress) =>
           dispatch({ type: "render-progress", progress }),
       });

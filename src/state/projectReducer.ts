@@ -1,4 +1,5 @@
 import type {
+  AudioCrossfadeSettings,
   AudioTrack,
   CardSettings,
   OrderingMode,
@@ -13,6 +14,7 @@ import type {
   ZoomEffectSettings,
 } from "../types";
 import {
+  DEFAULT_AUDIO_CROSSFADE,
   DEFAULT_END_CARD,
   DEFAULT_RENDER_SETTINGS,
   DEFAULT_TITLE_CARD,
@@ -49,6 +51,8 @@ export interface ProjectState {
   /** Auto-generated intro/outro cards (disabled by default). */
   titleCard: CardSettings;
   endCard: CardSettings;
+  /** Cross-fade between consecutive soundtrack tracks (disabled by default). */
+  audioCrossfade: AudioCrossfadeSettings;
   /** Project-wide effect defaults; items may override (null = inherit). */
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
@@ -73,6 +77,7 @@ export const initialProjectState: ProjectState = {
   settings: DEFAULT_RENDER_SETTINGS,
   titleCard: DEFAULT_TITLE_CARD,
   endCard: DEFAULT_END_CARD,
+  audioCrossfade: DEFAULT_AUDIO_CROSSFADE,
   projectTransition: DEFAULT_TRANSITION,
   projectZoom: DEFAULT_ZOOM,
   effectOverrides: {},
@@ -103,6 +108,7 @@ export type ProjectAction =
   | { type: "set-render-settings"; settings: Partial<RenderSettings> }
   | { type: "set-title-card"; card: Partial<CardSettings> }
   | { type: "set-end-card"; card: Partial<CardSettings> }
+  | { type: "set-audio-crossfade"; crossfade: Partial<AudioCrossfadeSettings> }
   /** Rehydrate the authoring state from local (IndexedDB) persistence. */
   | {
       type: "restore-project";
@@ -115,6 +121,7 @@ export type ProjectAction =
         | "settings"
         | "titleCard"
         | "endCard"
+        | "audioCrossfade"
         | "projectTransition"
         | "projectZoom"
         | "effectOverrides"
@@ -147,8 +154,24 @@ function move<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
+/** Total seconds shaved off the soundtrack by cross-fading consecutive tracks.
+ * Overlapping N tracks by D each removes (N-1)×D; D is clamped below the
+ * shortest track so a fade can never eat a whole track. Zero unless enabled
+ * with 2+ tracks. Shared by the duration math and the render. */
+export function crossfadePerPairSeconds(state: ProjectState): number {
+  const { audioCrossfade: cf, audioTracks } = state;
+  if (!cf.enabled || audioTracks.length < 2) return 0;
+  const shortest = Math.min(...audioTracks.map((t) => t.duration));
+  return Math.max(0, Math.min(cf.durationSeconds, shortest - 0.1));
+}
+
+export function crossfadeOverlap(state: ProjectState): number {
+  return crossfadePerPairSeconds(state) * Math.max(0, state.audioTracks.length - 1);
+}
+
 export function soundtrackDuration(state: ProjectState): number {
-  return state.audioTracks.reduce((s, t) => s + t.duration, 0);
+  const raw = state.audioTracks.reduce((s, t) => s + t.duration, 0);
+  return Math.max(0, raw - crossfadeOverlap(state));
 }
 
 export function totalUploadedBytes(state: ProjectState): number {
@@ -302,6 +325,13 @@ export function projectReducer(
       return {
         ...state,
         endCard: { ...state.endCard, ...action.card },
+        exportConfirmed: false,
+      };
+
+    case "set-audio-crossfade":
+      return {
+        ...state,
+        audioCrossfade: { ...state.audioCrossfade, ...action.crossfade },
         exportConfirmed: false,
       };
 

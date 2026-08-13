@@ -12,6 +12,7 @@
  * media.
  */
 import type {
+  AudioCrossfadeSettings,
   AudioTrack,
   CardSettings,
   ImageMediaItem,
@@ -23,7 +24,11 @@ import type {
   VisualMediaItem,
   ZoomEffectSettings,
 } from "../types";
-import { DEFAULT_END_CARD, DEFAULT_TITLE_CARD } from "../types";
+import {
+  DEFAULT_AUDIO_CROSSFADE,
+  DEFAULT_END_CARD,
+  DEFAULT_TITLE_CARD,
+} from "../types";
 import type { StageId } from "../state/projectReducer";
 
 const DB_NAME = "storymaker";
@@ -43,6 +48,7 @@ export interface RestoredProject {
   settings: RenderSettings;
   titleCard: CardSettings;
   endCard: CardSettings;
+  audioCrossfade: AudioCrossfadeSettings;
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
   effectOverrides: Record<string, VisualEffectOverrides | undefined>;
@@ -74,6 +80,7 @@ interface PersistedProject {
   settings: RenderSettings;
   titleCard: CardSettings;
   endCard: CardSettings;
+  audioCrossfade: AudioCrossfadeSettings;
   projectTransition: TransitionSettings;
   projectZoom: ZoomEffectSettings;
   effectOverrides: Record<string, VisualEffectOverrides | undefined>;
@@ -127,6 +134,7 @@ export function toPersisted(state: RestoredProject): {
       settings: state.settings,
       titleCard: state.titleCard,
       endCard: state.endCard,
+      audioCrossfade: state.audioCrossfade,
       projectTransition: state.projectTransition,
       projectZoom: state.projectZoom,
       effectOverrides: state.effectOverrides,
@@ -178,6 +186,7 @@ export function fromPersisted(
     settings: snapshot.settings,
     titleCard: snapshot.titleCard ?? DEFAULT_TITLE_CARD,
     endCard: snapshot.endCard ?? DEFAULT_END_CARD,
+    audioCrossfade: snapshot.audioCrossfade ?? DEFAULT_AUDIO_CROSSFADE,
     projectTransition: snapshot.projectTransition,
     projectZoom: snapshot.projectZoom,
     effectOverrides: snapshot.effectOverrides,

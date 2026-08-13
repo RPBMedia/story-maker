@@ -258,6 +258,28 @@ export const DEFAULT_END_CARD: CardSettings = {
   zoom: "none",
 };
 
+// ---- audio cross-fade -------------------------------------------------------
+
+/** Cross-fade (overlap) between consecutive soundtrack tracks. Overlapping N
+ * tracks shortens the soundtrack by (N-1)×duration, which flows into the
+ * timeline so the video still matches the audio. A PAID capability. */
+export interface AudioCrossfadeSettings {
+  enabled: boolean;
+  durationSeconds: number;
+}
+
+export const AUDIO_CROSSFADE_LIMITS = {
+  min: 1,
+  max: 5,
+  step: 0.5,
+  default: 1.5,
+} as const;
+
+export const DEFAULT_AUDIO_CROSSFADE: AudioCrossfadeSettings = {
+  enabled: false,
+  durationSeconds: AUDIO_CROSSFADE_LIMITS.default,
+};
+
 // ---- effect-aware timeline --------------------------------------------------
 
 /** One boundary between segment i and i+1 (the transition AFTER item i). */
@@ -347,6 +369,8 @@ export interface PlanEntitlements {
   /** Zoom (push in/out) on title & end cards — a paid-only card polish. Free
    * plans can still add cards and fade them, just without zoom. */
   titleCardZoom: boolean;
+  /** Cross-fade between consecutive soundtrack tracks — paid only. */
+  audioCrossfade: boolean;
   /** Exports allowed per month; null = unlimited. */
   exportQuotaPerMonth: number | null;
   /** Fast/priority server-side rendering (vs in-browser). */

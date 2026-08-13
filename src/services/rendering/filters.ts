@@ -142,6 +142,35 @@ export function fadeInChain(fadeSeconds: number): string | null {
   return `fade=t=in:st=0:d=${fadeSeconds.toFixed(3)}:color=black`;
 }
 
+/**
+ * filter_complex for the soundtrack: a straight concat of the tracks, or —
+ * when a cross-fade is requested and there are 2+ tracks — a chain of
+ * `acrossfade` so each track dissolves into the next. Output pad is [out].
+ * Inputs are expected as [0:a], [1:a], … in order. `crossfadeSeconds` must
+ * already be clamped below the shortest track.
+ */
+export function buildSoundtrackFilter(
+  trackCount: number,
+  crossfadeSeconds: number,
+): string {
+  if (trackCount < 2) return "[0:a]anull[out]";
+  if (crossfadeSeconds <= 0) {
+    return (
+      Array.from({ length: trackCount }, (_, i) => `[${i}:a]`).join("") +
+      `concat=n=${trackCount}:v=0:a=1[out]`
+    );
+  }
+  const d = crossfadeSeconds.toFixed(3);
+  let prev = "[0:a]";
+  const parts: string[] = [];
+  for (let i = 1; i < trackCount; i++) {
+    const out = i === trackCount - 1 ? "[out]" : `[axf${i}]`;
+    parts.push(`${prev}[${i}:a]acrossfade=d=${d}:c1=tri:c2=tri${out}`);
+    prev = `[axf${i}]`;
+  }
+  return parts.join(";");
+}
+
 export interface XfadeGraph {
   /** Full -filter_complex value. */
   filter: string;

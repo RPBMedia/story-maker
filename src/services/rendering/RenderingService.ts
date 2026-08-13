@@ -37,6 +37,7 @@ import {
   buildXfadeGraph,
   fadeOutChain,
   fadeInChain,
+  buildSoundtrackFilter,
   needsXfadePath,
   scalePadChain,
   zoomChain,
@@ -70,6 +71,9 @@ export interface RenderJobInput {
   timeline: EffectiveTimeline;
   soundtrackDuration: number;
   settings: RenderSettings;
+  /** Seconds to cross-fade between consecutive tracks (0 = hard concat).
+   * Already clamped below the shortest track. */
+  audioCrossfadeSeconds?: number;
   onProgress: (p: RenderProgress) => void;
 }
 
@@ -162,14 +166,15 @@ export class RenderingService {
     // ---- soundtrack
     report(w.audio, 0);
     const inputs = audioNames.flatMap((n) => ["-i", n]);
-    const concatSpec =
-      audioNames.map((_, i) => `[${i}:a]`).join("") +
-      `concat=n=${audioNames.length}:v=0:a=1[out]`;
+    const soundtrackSpec = buildSoundtrackFilter(
+      audioNames.length,
+      job.audioCrossfadeSeconds ?? 0,
+    );
     await this.exec(
       [
         ...inputs,
         "-filter_complex",
-        concatSpec,
+        soundtrackSpec,
         "-map",
         "[out]",
         "-ar",

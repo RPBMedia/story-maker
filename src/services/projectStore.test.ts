@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toPersisted, fromPersisted, hasSavedProject, type RestoredProject } from "./projectStore";
 import {
+  DEFAULT_AUDIO_CROSSFADE,
   DEFAULT_END_CARD,
   DEFAULT_RENDER_SETTINGS,
   DEFAULT_TITLE_CARD,
@@ -35,6 +36,7 @@ function makeState(): RestoredProject {
     settings: { ...DEFAULT_RENDER_SETTINGS, width: 1080, height: 1920 },
     titleCard: DEFAULT_TITLE_CARD,
     endCard: DEFAULT_END_CARD,
+    audioCrossfade: DEFAULT_AUDIO_CROSSFADE,
     projectTransition: DEFAULT_TRANSITION,
     projectZoom: DEFAULT_ZOOM,
     effectOverrides: { v1: { transition: null, zoom: null } },

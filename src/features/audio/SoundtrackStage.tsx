@@ -7,6 +7,7 @@ import { useDragReorder } from "../../hooks/useDragReorder";
 import { probeAV } from "../../services/metadata";
 import { classifyFile, isDuplicate } from "../../utils/validation";
 import { formatBytes, formatDuration } from "../../utils/format";
+import { AUDIO_CROSSFADE_LIMITS } from "../../types";
 import type { AudioTrack } from "../../types";
 
 export function SoundtrackStage() {
@@ -156,6 +157,52 @@ export function SoundtrackStage() {
             </SortableCard>
           ))}
         </ul>
+      )}
+
+      {/* Cross-fade appears only with 2+ tracks — which is itself a paid
+          capability (Free is capped at one track), so this is paid by design. */}
+      {state.audioTracks.length >= 2 && entitlements.audioCrossfade && (
+        <div className="card crossfade-panel">
+          <label className="card-enable">
+            <input
+              type="checkbox"
+              checked={state.audioCrossfade.enabled}
+              onChange={(e) =>
+                dispatch({
+                  type: "set-audio-crossfade",
+                  crossfade: { enabled: e.target.checked },
+                })
+              }
+            />
+            <span>Cross-fade between tracks</span>
+          </label>
+          {state.audioCrossfade.enabled && (
+            <div className="effects-field">
+              <label className="effects-label" htmlFor="crossfade-duration">
+                Cross-fade:{" "}
+                <strong>{state.audioCrossfade.durationSeconds.toFixed(1)}s</strong>
+              </label>
+              <input
+                id="crossfade-duration"
+                type="range"
+                min={AUDIO_CROSSFADE_LIMITS.min}
+                max={AUDIO_CROSSFADE_LIMITS.max}
+                step={AUDIO_CROSSFADE_LIMITS.step}
+                value={state.audioCrossfade.durationSeconds}
+                onChange={(e) =>
+                  dispatch({
+                    type: "set-audio-crossfade",
+                    crossfade: { durationSeconds: Number(e.target.value) },
+                  })
+                }
+              />
+              <p className="effects-hint">
+                Each track dissolves into the next. This overlaps the tracks, so
+                the soundtrack (and video) get slightly shorter.
+              </p>
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
