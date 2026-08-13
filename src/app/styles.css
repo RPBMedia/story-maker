@@ -2081,6 +2081,10 @@ input[type="range"] {
   width: 25px;
   height: 44px;
 }
+.aspect-swatch--4-5 {
+  width: 30px;
+  height: 38px;
+}
 .aspect-swatch--1-1 {
   width: 34px;
   height: 34px;

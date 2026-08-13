@@ -8,7 +8,7 @@
  */
 import type { RenderSettings } from "../types";
 
-export type AspectRatio = "16:9" | "9:16" | "1:1";
+export type AspectRatio = "16:9" | "9:16" | "4:5" | "1:1";
 
 export interface AspectPreset {
   id: AspectRatio;
@@ -36,15 +36,22 @@ export function aspectPresets(maxResolution: {
     {
       id: "16:9",
       label: "Landscape",
-      hint: "16:9 · YouTube, desktop",
+      hint: "16:9 · YouTube, X",
       width: even(long),
       height: even((long * 9) / 16),
     },
     {
       id: "9:16",
-      label: "Portrait",
-      hint: "9:16 · Reels, TikTok, Stories",
+      label: "Vertical",
+      hint: "9:16 · Reels, TikTok, Shorts, Stories",
       width: even((long * 9) / 16),
+      height: even(long),
+    },
+    {
+      id: "4:5",
+      label: "Portrait",
+      hint: "4:5 · Instagram feed",
+      width: even((long * 4) / 5),
       height: even(long),
     },
     {
@@ -57,9 +64,20 @@ export function aspectPresets(maxResolution: {
   ];
 }
 
-/** Classify current render settings into an aspect bucket (for showing which
- * preset is active). */
+const RATIOS: Record<AspectRatio, number> = {
+  "16:9": 16 / 9,
+  "9:16": 9 / 16,
+  "4:5": 4 / 5,
+  "1:1": 1,
+};
+
+/** Classify current render settings into the closest aspect bucket by ratio
+ * (for showing which preset is active — distinguishes 9:16 from 4:5). */
 export function aspectOf(s: Pick<RenderSettings, "width" | "height">): AspectRatio {
-  if (s.width === s.height) return "1:1";
-  return s.width >= s.height ? "16:9" : "9:16";
+  const r = s.width / s.height;
+  let best: AspectRatio = "16:9";
+  for (const id of Object.keys(RATIOS) as AspectRatio[]) {
+    if (Math.abs(r - RATIOS[id]) < Math.abs(r - RATIOS[best])) best = id;
+  }
+  return best;
 }
